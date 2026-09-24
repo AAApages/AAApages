@@ -565,7 +565,7 @@ Check if this is a course lesson and determine which course context to use
     }).catch(() => {}); // non-blocking — don't fail submission if grades write fails
   }
 
-  async function submitCodeToBackend(code, language, description) {
+  async function submitCodeToBackend(code, language, description, selfAssessment) {
     const assignmentId = await ensureAssignmentId();
     // Resolve the user first so we don't burn a Gist creation on a request that will fail anyway.
     const { uid, personId } = await resolveCurrentUser();
@@ -584,7 +584,12 @@ Check if this is a course lesson and determine which course context to use
         isGroupSubmission: false,
         content,
         comment: description,
-        isLate: false
+        isLate: false,
+        technicalExcellence: selfAssessment.technicalExcellence,
+        communication: selfAssessment.communication,
+        workHabits: selfAssessment.workHabits,
+        aiOrchestration: selfAssessment.aiOrchestration,
+        selfAssessmentReflection: selfAssessment.selfAssessmentReflection
       })
     });
     if (!res.ok) {
@@ -595,12 +600,12 @@ Check if this is a course lesson and determine which course context to use
     await fetch(`${javaURI}/api/grades`, {
       ...fetchOptions,
       method: 'POST',
-      body: JSON.stringify({ uid, assignment: assignmentLabel, score: null, submission: content, submittedAt: new Date().toISOString() })
+      body: JSON.stringify({ uid, assignment: assignmentLabel, score: null, submission: { ...content, selfAssessment }, submittedAt: new Date().toISOString() })
     }).catch(() => {}); // non-blocking
     return gistUrl;
   }
 
-  async function submitFilesToBackend(files, notes) {
+  async function submitFilesToBackend(files, notes, selfAssessment) {
     const assignmentId = await ensureAssignmentId();
     const { uid, personId } = await resolveCurrentUser();
     const assignmentName = await resolveAssignmentName();
@@ -896,6 +901,12 @@ Check if this is a course lesson and determine which course context to use
           showStatus('error', 'Please enter some code before submitting.');
           return;
         }
+        const selfAssessment = getSelfAssessmentData();
+        const selfAssessmentError = validateSelfAssessment(selfAssessment);
+        if (selfAssessmentError) {
+          showStatus('error', selfAssessmentError);
+          return;
+        }
         submitBtn.disabled = true;
         showStatus('loading', 'Checking login...');
         try {
@@ -907,10 +918,11 @@ Check if this is a course lesson and determine which course context to use
         }
         showStatus('loading', 'Creating Gist and submitting...');
         try {
-          await submitCodeToBackend(code, language, notes);
-          saveSubmissionLocally('code', { language, notes });
+          await submitCodeToBackend(code, language, notes, selfAssessment);
+          saveSubmissionLocally('code', { language, notes, selfAssessment });
           showStatus('success', 'Code submitted successfully!');
           this.reset();
+          resetSelfAssessment();
         } catch (err) {
           showStatus('error', err.message);
         } finally {

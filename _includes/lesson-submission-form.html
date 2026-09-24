@@ -11,15 +11,6 @@
     Submit Assignment
   </h3>
 
-  {% if submission_type == "link" or submission_type == "github_issue" %}
-  {% if submission_type == "github_issue" %}
-    {% assign link_label = "GitHub Issue Link" %}
-    {% assign link_placeholder = "https://github.com/owner/repo/issues/123" %}
-  {% else %}
-    {% assign link_label = "Submission Link" %}
-    {% assign link_placeholder = "https://..." %}
-  {% endif %}
-  <form class="submission-form active" id="link-form">
   <div class="self-assessment" id="self-assessment">
     <h4 class="self-assessment-title">
       <i class="fas fa-clipboard-check"></i>
@@ -85,17 +76,15 @@
     </div>
   </div>
 
-  <div class="submission-options">
-    <button class="submission-tab" onclick="switchSubmissionType('link')" type="button">
-      <i class="fas fa-link"></i> Link Submission
-    </button>
-    <button class="submission-tab" onclick="switchSubmissionType('file')" type="button">
-      <i class="fas fa-file-upload"></i> File Upload
-    </button>
-  </div>
-
-  <!-- Link Submission Form -->
-  <form class="submission-form" id="link-form">
+  {% if submission_type == "link" or submission_type == "github_issue" %}
+  {% if submission_type == "github_issue" %}
+    {% assign link_label = "GitHub Issue Link" %}
+    {% assign link_placeholder = "https://github.com/owner/repo/issues/123" %}
+  {% else %}
+    {% assign link_label = "Submission Link" %}
+    {% assign link_placeholder = "https://..." %}
+  {% endif %}
+  <form class="submission-form active" id="link-form">
     <div class="form-group">
       <label for="submission-link">{{ link_label }}</label>
       <input type="url" id="submission-link" placeholder="{{ link_placeholder }}" required>
