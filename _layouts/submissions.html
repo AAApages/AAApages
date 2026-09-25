@@ -49,24 +49,7 @@ active_tab: submissions
                 <div id="my-submissions-container"></div>
             </div>
 
-            <!-- Assignment creator content (separate from the staff-wide view) -->
-            <div id="tab-content-created-assignments" class="tab-content hidden px-6 py-4 text-neutral-200">
-                <p class="text-neutral-400 mb-4">
-                    Assignments where your OCS UID is listed as a creator. Staff members see only their own created assignments here; the staff-wide list remains separate.
-                </p>
-                <div id="created-assignments-loading" class="flex items-center justify-center min-h-[240px]">
-                    <div class="text-center">
-                        <div class="inline-block">
-                            <svg class="h-8 w-8 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </div>
-                        <p class="text-neutral-400 mt-4">Loading created assignments...</p>
-                    </div>
-                </div>
-                <div id="created-assignments-container"></div>
-            </div>
+            {% include submissions/creator-dashboard.html %}
 
             <!-- All Submissions tab content (Admin only) -->
             <div id="tab-content-all-submissions" class="tab-content hidden px-6 py-4 text-neutral-200">
@@ -187,7 +170,6 @@ active_tab: submissions
 
 <style>
     #my-submissions-container,
-    #created-assignments-container,
     #all-submissions-container {
         width: 100%;
         overflow-x: auto;
@@ -534,6 +516,7 @@ active_tab: submissions
 
 <script type="module">
     import { javaURI, pythonURI, fetchOptions } from '{{ site.baseurl }}/assets/js/api/config.js';
+    import { createCreatorDashboard } from '{{ site.baseurl }}/assets/js/submissions/creator-dashboard.js';
 
     const apiUrl = `${javaURI}/api/assignment-submission-view/list`;
     const userInfoUrl = `${javaURI}/api/assignment-submission-view/user-info`;
@@ -552,10 +535,25 @@ active_tab: submissions
     let currentUsername = '';
     let activeEditSubmissionId = null;
 
+    const creatorDashboard = createCreatorDashboard({
+        managedAssignmentsUrl,
+        managedSubmissionsUrl,
+        courseManifestUrl: '{{ site.baseurl }}/assets/data/assignment-course-manifest.json',
+        fetchOptions,
+        baseUrl: '{{ site.baseurl }}',
+        renderContent,
+        renderAiSummary,
+        renderQualityScore,
+        getStatusBadge,
+        getFilterStatus,
+        escapeHtml,
+        cellTitle
+    });
+
     async function init() {
         try {
             await checkAdminStatus();
-            await Promise.all([loadSubmissions(), loadCreatedAssignments()]);
+            await Promise.all([loadSubmissions(), creatorDashboard.load(currentUsername)]);
             setupTabSwitcher();
             setupFilters();
             setupEditModal();
@@ -1614,11 +1612,9 @@ active_tab: submissions
 
     function hideLoadingSpinners() {
         const myLoading = document.getElementById('my-submissions-loading');
-        const createdLoading = document.getElementById('created-assignments-loading');
         const allLoading = document.getElementById('all-submissions-loading');
 
         if (myLoading) myLoading.style.display = 'none';
-        if (createdLoading) createdLoading.style.display = 'none';
         if (allLoading) allLoading.style.display = 'none';
     }
 
