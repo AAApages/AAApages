@@ -432,30 +432,39 @@ def main():
     candidates = []
     errors = []
     for f in find_files(root):
-        fm = read_frontmatter(f)
-        if not fm:
-            continue
-        if fm.get("assignment") is True:
-
-            # Spring defaults new assignments to file; omitting this field must not
-            # overwrite an existing assignment's selected submission type.
-            assignment_submission_type = fm.get("assignment_submission_type") or None
-
-            content_url = determine_content_url(root, f, fm)
-            name = fm.get("title") or fm.get("name") or f.stem
-            description = fm.get("description") or "auto-created from frontmatter"
-            points = fm.get("points")
-            due_date = fm.get("dueDate") or fm.get("due_date") or fm.get("due")
-            try:
-                creator_uids = read_creator_uids(fm, f)
-                course_codes = read_course_codes(fm, f)
-            except AssignmentFrontmatterError as error:
-                errors.append(str(error))
+        # A single malformed or unusual file (non-dict frontmatter, an encoding
+        # surprise, anything not anticipated below) must not abort the scan for
+        # every other file in the repo. Caught broadly and reported like the
+        # more specific AssignmentFrontmatterError cases already were, so
+        # maintainers still see it without the whole run going dark.
+        try:
+            fm = read_frontmatter(f)
+            if not fm:
                 continue
-            candidates.append(
-                (f, content_url, name, description, points, due_date,
-                 assignment_submission_type, creator_uids, course_codes)
-            )
+            if fm.get("assignment") is True:
+
+                # Spring defaults new assignments to file; omitting this field must not
+                # overwrite an existing assignment's selected submission type.
+                assignment_submission_type = fm.get("assignment_submission_type") or None
+
+                content_url = determine_content_url(root, f, fm)
+                name = fm.get("title") or fm.get("name") or f.stem
+                description = fm.get("description") or "auto-created from frontmatter"
+                points = fm.get("points")
+                due_date = fm.get("dueDate") or fm.get("due_date") or fm.get("due")
+                try:
+                    creator_uids = read_creator_uids(fm, f)
+                    course_codes = read_course_codes(fm, f)
+                except AssignmentFrontmatterError as error:
+                    errors.append(str(error))
+                    continue
+                candidates.append(
+                    (f, content_url, name, description, points, due_date,
+                     assignment_submission_type, creator_uids, course_codes)
+                )
+        except Exception as error:
+            errors.append(f"Skipped unreadable assignment frontmatter in {f}: {error}")
+            continue
 
     candidates, duplicate_errors = deduplicate_candidates_resilient(candidates)
     errors.extend(duplicate_errors)
