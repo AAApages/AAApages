@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../assets/js/submissions/creator-dashboard.js", import.meta.url), "utf8");
-const { assignmentPageUrl, filterCreatorSubmissions, withFrontmatterCourses } = await import(
+const {
+  DEFAULT_CREATOR_STATUS,
+  assignmentPageUrl,
+  creatorStatusForAssignment,
+  filterCreatorSubmissions,
+  withFrontmatterCourses,
+} = await import(
   `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`
 );
 
@@ -42,6 +48,25 @@ test("assignment, student UID, and status filters combine", () => {
     statusOf,
   );
   assert.deepEqual(filtered.map((row) => row.submitterUid), ["ben-2026"]);
+});
+
+test("creator dashboard initially focuses on pending review", () => {
+  assert.equal(DEFAULT_CREATOR_STATUS, "pending");
+  assert.equal(creatorStatusForAssignment(""), "pending");
+});
+
+test("selecting an assignment shows all statuses for that assignment", () => {
+  assert.equal(creatorStatusForAssignment("1"), "");
+});
+
+test("selecting an assignment through its count shows all statuses", () => {
+  const assignmentIdFromCount = "2";
+  assert.equal(creatorStatusForAssignment(assignmentIdFromCount), "");
+});
+
+test("clearing filters restores pending review", () => {
+  const clearedAssignmentId = "";
+  assert.equal(creatorStatusForAssignment(clearedAssignmentId), "pending");
 });
 
 test("frontmatter courses appear immediately without Spring synchronization", () => {

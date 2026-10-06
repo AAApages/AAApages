@@ -1,5 +1,10 @@
 const PAGE_SIZE = 25;
 const UNASSIGNED_COURSE = "__unassigned__";
+export const DEFAULT_CREATOR_STATUS = "pending";
+
+export function creatorStatusForAssignment(assignmentId) {
+  return String(assignmentId || "").trim() ? "" : DEFAULT_CREATOR_STATUS;
+}
 
 export function assignmentPageUrl(baseUrl, contentUrl) {
   if (!contentUrl) return "";
@@ -136,6 +141,7 @@ export function createCreatorDashboard(options) {
       courseOptions.push(`<option value="${UNASSIGNED_COURSE}">Unassigned</option>`);
     }
     courseFilter.innerHTML = '<option value="">All student courses</option>' + courseOptions.join("");
+    element("creator-filter-status").value = creatorStatusForAssignment(assignmentFilter.value);
   }
 
   function filteredSubmissions() {
@@ -215,14 +221,21 @@ export function createCreatorDashboard(options) {
 
   function bindInteractions() {
     element("creator-submission-filters").addEventListener("submit", (event) => event.preventDefault());
-    ["creator-filter-course", "creator-filter-assignment", "creator-filter-student", "creator-filter-status"]
+    ["creator-filter-course", "creator-filter-student", "creator-filter-status"]
       .forEach((id) => element(id).addEventListener("input", () => {
         currentPage = 1;
         renderSubmissions();
       }));
 
+    element("creator-filter-assignment").addEventListener("input", (event) => {
+      element("creator-filter-status").value = creatorStatusForAssignment(event.target.value);
+      currentPage = 1;
+      renderSubmissions();
+    });
+
     element("creator-clear-filters").addEventListener("click", () => {
       element("creator-submission-filters").reset();
+      element("creator-filter-status").value = creatorStatusForAssignment("");
       currentPage = 1;
       renderSubmissions();
     });
@@ -231,6 +244,7 @@ export function createCreatorDashboard(options) {
       const button = event.target.closest("[data-assignment-id]");
       if (!button) return;
       element("creator-filter-assignment").value = button.dataset.assignmentId;
+      element("creator-filter-status").value = creatorStatusForAssignment(button.dataset.assignmentId);
       currentPage = 1;
       renderSubmissions();
       element("creator-submission-list-title").scrollIntoView({
