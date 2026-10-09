@@ -53,17 +53,19 @@
         </div>
       </div>
       <form class="chat-form" id="dmForm" autocomplete="off">
+        <button class="chat-send dm-cancel-edit" id="dmCancelEdit" type="button" hidden>Cancel</button>
         <button class="chat-send" id="dmSend" type="submit" disabled>
           <i class="fas fa-paper-plane" aria-hidden="true"></i><span>Send</span>
         </button>
       </form>
+      <p class="dm-form-status" id="dmFormStatus" role="alert" hidden></p>
     </div>
   </div>
 </section>
 
 <script type="module">
   import { javaURI, javaWebSocketURI, pythonURI, fetchOptions } from '{{site.baseurl}}/assets/js/api/config.js';
-  import { createRichComposer, renderRichMessage } from '{{site.baseurl}}/assets/js/chat/rich-text.js';
+  import { createRichComposer, renderDeletedMessage, renderRichMessage } from '{{site.baseurl}}/assets/js/chat/rich-text.js';
 
   const SOCKJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js';
   const STOMP_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js';
@@ -90,6 +92,7 @@
   const state = {
     currentUserUid: null,
     currentUserDisplayName: 'You',
+    currentUserPfp: null,
     conversations: [],
     activeConversationId: null,
     stompClient: null,
@@ -97,6 +100,11 @@
     connected: false,
     pickerSelected: new Map(), // id -> { id, uid, name }
     seenMessageIds: new Set(), // reset whenever the active conversation changes
+    messageMap: new Map(),
+    editingMessageId: null,
+    editingMessage: null,
+    editInProgress: false,
+    deletingMessageIds: new Set(),
     unseenWhileHidden: false, // a message reached the open conversation while the tab was hidden
     lastDayKey: null,
     lastSender: null,
@@ -108,6 +116,8 @@
   const signedOutNoteEl = document.getElementById('dmSignedOutNote');
   const messagesEl = document.getElementById('dmMessages');
   const sendBtn = document.getElementById('dmSend');
+  const cancelEditBtn = document.getElementById('dmCancelEdit');
+  const formStatusEl = document.getElementById('dmFormStatus');
   const formEl = document.getElementById('dmForm');
   const newChatBtn = document.getElementById('dmNewChatBtn');
   const pickerEl = document.getElementById('dmPicker');
@@ -123,7 +133,7 @@
     onSubmit: submitMessage,
   });
   formEl.classList.add('chat-form--rich');
-  formEl.insertBefore(composer.element, sendBtn);
+  formEl.insertBefore(composer.element, cancelEditBtn);
 
   function setStatus(text, tone) {
     statusEl.textContent = text;
@@ -132,14 +142,101 @@
   }
 
   function setComposerEnabled(enabled) {
-    composer.setEnabled(enabled);
-    sendBtn.disabled = !enabled || !state.activeConversationId;
+    composer.setEnabled(enabled && !state.editInProgress);
+    sendBtn.disabled = !enabled || !state.activeConversationId || state.editInProgress;
+    cancelEditBtn.hidden = !state.editingMessageId;
+    cancelEditBtn.disabled = state.editInProgress;
+    const icon = sendBtn.querySelector('i');
+    const label = sendBtn.querySelector('span');
+    if (icon) icon.className = state.editingMessageId ? 'fas fa-save' : 'fas fa-paper-plane';
+    if (label) label.textContent = state.editingMessageId ? 'Save' : 'Send';
+  }
+
+  function showFormMessage(message) {
+    formStatusEl.textContent = message;
+    formStatusEl.hidden = !message;
+  }
+
+  function resetEditState() {
+    state.editingMessageId = null;
+    state.editingMessage = null;
+    state.editInProgress = false;
+    composer.clear();
+    showFormMessage('');
+    setComposerEnabled(Boolean(state.currentUserUid));
+  }
+
+  function beginEditMessage(message) {
+    if (state.editInProgress || !message || !message.id || message.deleted
+      || message.senderUid !== state.currentUserUid) return;
+    state.editingMessageId = message.id;
+    state.editingMessage = message;
+    composer.clear();
+    composer.setHTML(message.body || '');
+    showFormMessage('');
+    setComposerEnabled(Boolean(state.currentUserUid));
+    composer.focus();
   }
 
   function submitMessage() {
+    if (state.editInProgress) return;
     if (composer.isEmpty() || composer.isOverLimit()) return;
+    if (state.editingMessageId) {
+      state.editInProgress = true;
+      showFormMessage('');
+      setComposerEnabled(Boolean(state.currentUserUid));
+      editMessage(state.editingMessageId, composer.getHTML()).then((ok) => {
+        if (ok) resetEditState();
+        else if (state.messageMap.get(String(state.editingMessageId))?.deleted) {
+          // The message was deleted while the save was in flight.
+          resetEditState();
+          showFormMessage('That message was deleted, so your edit was not saved.');
+        } else {
+          state.editInProgress = false;
+          setComposerEnabled(Boolean(state.currentUserUid));
+          showFormMessage('Could not save the edited message. Please try again.');
+        }
+      });
+      return;
+    }
     sendMessage(composer.getHTML()).then((ok) => { if (ok) composer.clear(); });
   }
+
+  function updateMessageBody(messageId, body) {
+    const key = String(messageId ?? '');
+    if (!key) return;
+    const stored = state.messageMap.get(key);
+    if (stored?.deleted) return;
+
+    const row = messagesEl.querySelector(`[data-message-id="${CSS.escape(key)}"]`);
+    if (row) {
+      const bodyTarget = row.querySelector('.chat-msg-body');
+      if (bodyTarget) {
+        bodyTarget.innerHTML = '';
+        renderRichMessage(bodyTarget, body || '');
+      }
+      const meta = row.querySelector('.chat-msg-meta');
+      if (meta && !meta.querySelector('.chat-msg-edited')) {
+        const editedEl = document.createElement('span');
+        editedEl.className = 'chat-msg-edited';
+        editedEl.textContent = '(edited)';
+        meta.appendChild(editedEl);
+      }
+    }
+
+    if (stored) {
+      stored.body = body ?? stored.body;
+      stored.edited = true;
+    }
+  }
+
+  composer.element.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.editingMessageId && !state.editInProgress) {
+      event.preventDefault();
+      resetEditState();
+    }
+  });
+  cancelEditBtn.addEventListener('click', resetEditState);
 
   /* ── Day/sender-grouped message rendering (same idiom as announcement_chat.html) ── */
 
@@ -178,6 +275,34 @@
     return `tint-${(hash % 5) + 1}`;
   }
 
+  // Person.pfp is either a path/URL (seeded accounts, e.g. "/images/toby.png")
+  // or raw base64 image data (uploaded photos) with no "data:" prefix of its own.
+  function pfpSrc(pfp) {
+    if (!pfp) return null;
+    if (/^(https?:)?\/\//.test(pfp) || pfp.startsWith('/') || pfp.startsWith('data:')) return pfp;
+    return `data:image/png;base64,${pfp}`;
+  }
+
+  // Renders a real photo when one is available, falling back to the tinted
+  // initials circle (and back again if the image URL 404s).
+  function buildAvatar(pfp, initials, isSelf, tintClass) {
+    const avatar = document.createElement('span');
+    avatar.className = ['chat-avatar', isSelf ? '' : tintClass].filter(Boolean).join(' ');
+    avatar.setAttribute('aria-hidden', 'true');
+    const src = pfpSrc(pfp);
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.addEventListener('error', () => { img.remove(); avatar.textContent = initials; }, { once: true });
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials;
+    }
+    return avatar;
+  }
+
   function clearMessagesEmpty() {
     const empty = document.getElementById('dmMessagesEmpty');
     if (empty) empty.remove();
@@ -189,8 +314,16 @@
     state.lastTime = 0;
   }
 
-  function appendMessage({ senderUid, senderName, body, sentAt }) {
+  function appendMessage(message) {
+    const { id, senderUid, senderName, senderPfp, body, sentAt } = message;
+    const isDeleted = Boolean(message.deleted || message.isDeleted || message.deletedAt);
     clearMessagesEmpty();
+
+    const isEdited = Boolean(message.edited);
+    const messageId = String(id || `${senderUid}:${sentAt || Math.random()}`);
+    state.messageMap.set(messageId, {
+      id: messageId, senderUid, senderName, senderPfp, body: isDeleted ? '' : body, sentAt, deleted: isDeleted, edited: isEdited,
+    });
 
     const isSelf = senderUid === state.currentUserUid;
     const who = isSelf ? 'You' : (senderName || senderUid || 'Unknown');
@@ -219,11 +352,15 @@
     const row = document.createElement('div');
     row.className = ['chat-msg', isSelf ? 'is-self' : '', continued ? 'is-continued' : '']
       .filter(Boolean).join(' ');
+    row.dataset.messageId = messageId;
+    if (isDeleted) row.classList.add('is-deleted');
 
-    const avatar = document.createElement('span');
-    avatar.className = ['chat-avatar', isSelf ? '' : tintFor(who)].filter(Boolean).join(' ');
-    avatar.textContent = initialsFor(isSelf ? (state.currentUserDisplayName || 'You') : who);
-    avatar.setAttribute('aria-hidden', 'true');
+    const avatar = buildAvatar(
+      isSelf ? state.currentUserPfp : senderPfp,
+      initialsFor(isSelf ? (state.currentUserDisplayName || 'You') : who),
+      isSelf,
+      tintFor(who),
+    );
 
     const main = document.createElement('div');
     main.className = 'chat-msg-main';
@@ -240,12 +377,49 @@
       timeEl.textContent = formatTime(when);
       meta.appendChild(timeEl);
     }
+    if (isEdited && !isDeleted) {
+      const editedEl = document.createElement('span');
+      editedEl.className = 'chat-msg-edited';
+      editedEl.textContent = '(edited)';
+      meta.appendChild(editedEl);
+    }
+
+    let actions;
+    if (isSelf && !isDeleted) {
+      actions = document.createElement('div');
+      actions.className = 'chat-msg-actions';
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'chat-msg-action';
+      editBtn.setAttribute('aria-label', 'Edit message');
+      editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
+      editBtn.addEventListener('click', () => beginEditMessage({ ...state.messageMap.get(messageId), id: messageId, senderUid }));
+      actions.appendChild(editBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'chat-msg-action';
+      deleteBtn.setAttribute('aria-label', 'Delete message');
+      deleteBtn.title = 'Delete message';
+      deleteBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i>';
+      deleteBtn.addEventListener('click', () => {
+        if (state.editInProgress) {
+          showFormMessage('Wait for the current edit to finish before deleting a message.');
+          return;
+        }
+        deleteBtn.disabled = true;
+        deleteMessage(messageId).finally(() => { deleteBtn.disabled = false; });
+      });
+      actions.appendChild(deleteBtn);
+    }
 
     const bodyEl = document.createElement('span');
     bodyEl.className = 'chat-msg-body';
-    renderRichMessage(bodyEl, body);
+    if (isDeleted) renderDeletedMessage(bodyEl);
+    else renderRichMessage(bodyEl, body);
 
     main.append(meta, bodyEl);
+    if (actions) main.appendChild(actions);
     row.append(avatar, main);
     messagesEl.appendChild(row);
 
@@ -264,6 +438,7 @@
       if (!name || !user?.uid) return false;
       state.currentUserUid = user.uid;
       state.currentUserDisplayName = name;
+      state.currentUserPfp = user.pfp || null;
       return true;
     } catch (err) {
       console.warn('DM chat: user lookup failed', err);
@@ -354,8 +529,14 @@
 
   async function selectConversation(id) {
     if (state.activeConversationId === id) return;
+    if (state.editInProgress) {
+      showFormMessage('Wait for the current edit to finish before changing conversations.');
+      return;
+    }
+    resetEditState();
     state.activeConversationId = id;
     state.seenMessageIds.clear();
+    state.messageMap.clear();
     resetMessageGrouping();
     renderConversationList();
 
@@ -372,6 +553,7 @@
       const res = await fetch(`${javaURI}/api/dm/conversations/${id}/messages`, fetchOptions);
       if (!res.ok) { console.warn('DM chat: messages HTTP', res.status); return; }
       const messages = await res.json();
+      state.messageMap.clear();
       (messages || []).forEach((msg) => {
         if (state.seenMessageIds.has(msg.id)) return;
         state.seenMessageIds.add(msg.id);
@@ -381,7 +563,6 @@
       console.warn('DM chat: messages load failed', err);
     }
   }
-
   /* ── New-chat picker ──────────────────────────────────────────────── */
 
   function renderPickerSelected() {
@@ -473,6 +654,30 @@
 
   function handleIncoming(event) {
     if (!event || event.conversationId !== state.activeConversationId) return;
+    const messageId = String(event.id ?? '');
+    const eventType = String(event.type || '').toLowerCase();
+    const isDeleteEvent = event.deleted === true
+      || eventType === 'deleted'
+      || eventType === 'message-deleted'
+      || eventType === 'message_deleted';
+    if (isDeleteEvent) {
+      markMessageDeleted(messageId);
+      // Someone else's delete can change our unread counts; the deleter's own
+      // client already dispatches this from deleteMessage().
+      if (event.senderUid !== state.currentUserUid) window.dispatchEvent(new Event('dm:refresh-unread'));
+      return;
+    }
+
+    const body = event.body ?? event.messageBody;
+    const isEditEvent = event.type === 'edited'
+      || event.type === 'message-edited'
+      || event.editType === 'update'
+      || event.editType === 'edited'
+      || (state.messageMap.has(messageId) && body !== undefined);
+    if (isEditEvent) {
+      if (body !== undefined) updateMessageBody(messageId, body);
+      return;
+    }
     if (state.seenMessageIds.has(event.id)) return;
     state.seenMessageIds.add(event.id);
     appendMessage(event);
@@ -544,6 +749,78 @@
     } catch (err) {
       console.error('DM chat: send failed', err);
       return false;
+    }
+  }
+
+  async function editMessage(messageId, body) {
+    if (!state.activeConversationId || !messageId) return false;
+    try {
+      const res = await fetch(`${javaURI}/api/dm/conversations/${state.activeConversationId}/messages/${messageId}`, {
+        ...fetchOptions,
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) { console.warn('DM chat: edit HTTP', res.status); return false; }
+      const updated = await res.json().catch(() => null);
+      const finalBody = (updated && (updated.body || updated.messageBody)) || body;
+      updateMessageBody(messageId, finalBody);
+      return true;
+    } catch (err) {
+      console.error('DM chat: edit failed', err);
+      return false;
+    }
+  }
+
+  function markMessageDeleted(messageId) {
+    const key = String(messageId ?? '');
+    if (!key) return;
+
+    const stored = state.messageMap.get(key);
+    if (stored) {
+      stored.body = '';
+      stored.deleted = true;
+    }
+    const row = messagesEl.querySelector(`[data-message-id="${CSS.escape(key)}"]`);
+    if (!row) return;
+
+    const bodyTarget = row.querySelector('.chat-msg-body');
+    if (bodyTarget) renderDeletedMessage(bodyTarget);
+    row.classList.add('is-deleted');
+    row.querySelector('.chat-msg-actions')?.remove();
+    if (state.editingMessageId === key && !state.editInProgress) resetEditState();
+  }
+
+  async function deleteMessage(messageId) {
+    if (!state.activeConversationId || !messageId || state.editInProgress) return false;
+
+    const conversationId = state.activeConversationId;
+    const key = String(messageId);
+    const message = state.messageMap.get(key);
+    if (!message || message.deleted || message.senderUid !== state.currentUserUid
+      || state.deletingMessageIds.has(key)) return false;
+    state.deletingMessageIds.add(key);
+    showFormMessage('');
+    try {
+      const res = await fetch(
+        `${javaURI}/api/dm/conversations/${conversationId}/messages/${encodeURIComponent(key)}`,
+        { ...fetchOptions, method: 'DELETE' },
+      );
+      if (!res.ok) {
+        console.warn('DM chat: delete HTTP', res.status);
+        showFormMessage('Could not delete the message. Please try again.');
+        return false;
+      }
+      if (state.activeConversationId === conversationId) markMessageDeleted(key);
+      window.dispatchEvent(new CustomEvent('dm:message-deleted', {
+        detail: { conversationId, messageId: key },
+      }));
+      return true;
+    } catch (err) {
+      console.error('DM chat: delete failed', err);
+      showFormMessage('Could not delete the message. Please try again.');
+      return false;
+    } finally {
+      state.deletingMessageIds.delete(key);
     }
   }
 
