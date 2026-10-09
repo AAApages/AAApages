@@ -1548,12 +1548,12 @@ Check if this is a course lesson and determine which course context to use
         <div class="form-group">
           <label>Upload Files</label>
           <div class="file-upload-area" id="file-upload-area-blog">
-            <input type="file" id="file-input-blog" multiple accept=".pdf,.zip,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt,.ipynb" style="display: none;">
+            <input type="file" id="file-input-blog" multiple accept=".pdf,.zip,.png,.jpg,.jpeg,.gif,.doc,.docx,.txt,.ipynb,.java,.py,.js,.md" style="display: none;">
             <div class="file-upload-icon">
               <i class="fa-solid fa-cloud-upload-alt"></i>
             </div>
             <div class="file-upload-text">Click to upload or drag and drop</div>
-            <div class="file-upload-hint">PDF, ZIP, images, documents, or Jupyter notebooks (.ipynb) (Max 10MB per file)</div>
+            <div class="file-upload-hint">PDF, ZIP, images, documents, Jupyter notebooks (.ipynb), or code files (.java, .py, .js, .md) (Max 10MB per file)</div>
           </div>
           <div class="file-list" id="file-list-blog"></div>
         </div>
@@ -2118,10 +2118,15 @@ Check if this is a course lesson and determine which course context to use
   <script type="module">
     import { pythonURI, javaURI, fetchOptions } from '{{ site.baseurl }}/assets/js/api/config.js';
     import { exportToGist } from '{{ site.baseurl }}/assets/js/gist.js';
+    import { listRunners, unsavedRunners, readRunners } from '{{ site.baseurl }}/assets/js/runner-io.js';
     window.pythonURI = pythonURI;
     window.javaURI = javaURI;
     window.fetchOptions = fetchOptions;
     window.exportToGist = exportToGist;
+    // Used by the blog code-submission form, which runs in a classic script.
+    window.listRunners = listRunners;
+    window.unsavedRunners = unsavedRunners;
+    window.readRunners = readRunners;
   </script>
   <script src="{{ site.baseurl }}/assets/js/ocs-analytics-enhanced.js"></script>
   <script src="{{ site.baseurl }}/assets/js/code-runner-analytics.js"></script>
