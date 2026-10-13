@@ -517,7 +517,6 @@ active_tab: submissions
 <script type="module">
     import { javaURI, pythonURI, fetchOptions } from '{{ site.baseurl }}/assets/js/api/config.js';
     import { createCreatorDashboard } from '{{ site.baseurl }}/assets/js/submissions/creator-dashboard.js';
-    import { renderCourseFeedbackSummary, summarizeCourseFeedback } from '{{ site.baseurl }}/assets/js/submissions/course-feedback.js';
 
     const apiUrl = `${javaURI}/api/assignment-submission-view/list`;
     const userInfoUrl = `${javaURI}/api/assignment-submission-view/user-info`;
@@ -548,8 +547,7 @@ active_tab: submissions
         getStatusBadge,
         getFilterStatus,
         escapeHtml,
-        cellTitle,
-        renderCourseFeedback: (rows) => renderCourseFeedbackSummary(summarizeCourseFeedback(rows), escapeHtml)
+        cellTitle
     });
 
     async function init() {

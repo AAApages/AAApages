@@ -148,10 +148,8 @@ while preserving all critical instructions. The agent must still communicate wit
 
 ## 作业提交（Assignment submissions）
 
-* **代码 runner 保存状态：** `StorageManager` 在保存/清除时向 `window` 派发 `runner-storage-change` 事件；提交表单的 "saved / not saved yet" 列表依赖它刷新，不要绕过 `StorageManager` 直接写 runner 的 localStorage。
-* **AI 即时评审：** Spring 提交接口在响应中返回 `autoGrade`（`graded`/`not_gradeable`/`failed` + 原因）；前端 `showAutoGradeResult` 必须显示它，不要静默吞掉未评分原因。
-* **Gist 密钥：** 学生可在 Profile 保存个人 GitHub token（`/api/gist-key`，AES-GCM 加密，需 `GIST_TOKEN_ENCRYPTION_KEY`）；未保存时回退到服务器 `GIST_TOKEN`。注意 `PUT/DELETE /api/person/**` 仅限管理员，所以端点不在该路径下。
-* **课程反馈：** 提交时的 Likert 课程问卷存为 `content.courseFeedback`（文件上传通过 multipart 字段 `courseFeedback` JSON）；分析逻辑在 [assets/js/submissions/course-feedback.js](assets/js/submissions/course-feedback.js)，Teacher 标签页展示汇总。
+* **代码 runner 保存状态：** `StorageManager` 在保存/清除时向 `window` 派发 `runner-storage-change`（`detail.storageKey`）。提交表单的 "saved / not saved yet" 列表靠它刷新；计划中的每个 runner 旁的保存指示也应监听同一事件，不要另建刷新机制，也不要绕过 `StorageManager` 直接写 runner 的 localStorage。
+* **先同步上游再动手：** 个人 Gist token 已在上游实现（Spring `/api/gist-connection`，前端 `profile-gist-connection.html`，需生产环境配置 `GIST_TOKEN_ENCRYPTION_KEY`）。改动 Gist/提交相关代码前先 `git fetch` 并对比上游，避免重复实现。
 
 ## 反模式
 

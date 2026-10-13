@@ -14,6 +14,7 @@ node_modules
 .env
 _posts/2024-06-25-RDS-and-Flask-Setup-
 venv/
+venv
 .venv/
 .venv
 port_venv/
