@@ -220,6 +220,11 @@ export function renderRichMessage(container, raw) {
   container.appendChild(sanitizeToFragment(raw));
 }
 
+export function renderDeletedMessage(container) {
+  container.replaceChildren(document.createTextNode('This message was deleted.'));
+  container.classList.add('is-deleted');
+}
+
 /* ------------------------------------------------------------------ *
  * Composer
  * ------------------------------------------------------------------ */
@@ -763,6 +768,11 @@ export function createRichComposer(opts = {}) {
       editor.innerHTML = '';
       savedRange = null;
       resetTypingFormat();
+      handleChange();
+    },
+    setHTML(raw) {
+      editor.innerHTML = sanitizeRichText(raw || '');
+      savedRange = null;
       handleChange();
     },
     setEnabled(enabled) {
