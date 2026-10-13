@@ -68,7 +68,10 @@ export async function exportToGist(files, opts = {}) {
     if (res.status === 401 || res.status === 403) {
       throw new Error('Sign in before exporting.');
     }
-    throw new Error(`Export failed (${res.status})`);
+    // The server explains fixable failures (e.g. "No Gist key available...");
+    // pass that on instead of a bare status code.
+    const { error } = await res.json().catch(() => ({}));
+    throw new Error(error || `Export failed (${res.status})`);
   }
 
   const { url } = await res.json();

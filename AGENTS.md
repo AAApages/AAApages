@@ -146,6 +146,13 @@ while preserving all critical instructions. The agent must still communicate wit
 * **代码重复警告：** 聊天逻辑存在于多处——规范源是 [assets/js/projects/student-management-groups/groups.js](assets/js/projects/student-management-groups/groups.js)（"CHAT FUNCTIONALITY" 段），但 [_includes/group_dashboard.html](_includes/group_dashboard.html) 与 [_includes/lesson_chat.html](_includes/lesson_chat.html) 内嵌了副本；修改后必须手动同步这些 include，否则行为不一致。
 * **课程聊天约定：** lesson 页面通过 frontmatter `chat: true` 启用，共享 backbone 群组 `"lessons"`，以 `[[lesson:<url>]]` 标记按页面隔离。
 
+## 作业提交（Assignment submissions）
+
+* **代码 runner 保存状态：** `StorageManager` 在保存/清除时向 `window` 派发 `runner-storage-change` 事件；提交表单的 "saved / not saved yet" 列表依赖它刷新，不要绕过 `StorageManager` 直接写 runner 的 localStorage。
+* **AI 即时评审：** Spring 提交接口在响应中返回 `autoGrade`（`graded`/`not_gradeable`/`failed` + 原因）；前端 `showAutoGradeResult` 必须显示它，不要静默吞掉未评分原因。
+* **Gist 密钥：** 学生可在 Profile 保存个人 GitHub token（`/api/gist-key`，AES-GCM 加密，需 `GIST_TOKEN_ENCRYPTION_KEY`）；未保存时回退到服务器 `GIST_TOKEN`。注意 `PUT/DELETE /api/person/**` 仅限管理员，所以端点不在该路径下。
+* **课程反馈：** 提交时的 Likert 课程问卷存为 `content.courseFeedback`（文件上传通过 multipart 字段 `courseFeedback` JSON）；分析逻辑在 [assets/js/submissions/course-feedback.js](assets/js/submissions/course-feedback.js)，Teacher 标签页展示汇总。
+
 ## 反模式
 
 ### 上帝函数

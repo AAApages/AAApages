@@ -143,6 +143,7 @@ Check if this is a course lesson and determine which course context to use
   import { pythonURI, fetchOptions, javaURI } from '{{ site.baseurl }}/assets/js/api/config.js';
   import { exportToGist } from '{{ site.baseurl }}/assets/js/gist.js';
   import { listRunners, unsavedRunners, readRunners } from '{{ site.baseurl }}/assets/js/runner-io.js';
+  import { validateCourseFeedback } from '{{ site.baseurl }}/assets/js/submissions/course-feedback.js';
 
   /**
    * ============================================
@@ -660,10 +661,10 @@ Check if this is a course lesson and determine which course context to use
     return CURRENT_ASSIGNMENT_ID;
   }
 
-  async function submitLinkToBackend(link, description, selfAssessment) {
+  async function submitLinkToBackend(link, description, selfAssessment, courseFeedback) {
     const assignmentId = await ensureAssignmentId();
     const { uid, personId } = await resolveCurrentUser();
-    const content = { type: SUBMISSION_TYPE === 'github_issue' ? 'github_issue' : 'link', url: link, notes: description };
+    const content = { type: SUBMISSION_TYPE === 'github_issue' ? 'github_issue' : 'link', url: link, notes: description, courseFeedback };
     const res = await fetch(`${javaURI}/api/submissions/${assignmentId}`, {
       ...fetchOptions,
       method: 'POST',
@@ -685,6 +686,7 @@ Check if this is a course lesson and determine which course context to use
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error || res.statusText);
     }
+    const saved = await res.json().catch(() => ({}));
     // Dual-write to EshikaP1's grades system
     const assignmentLabel = (typeof CURRENT_ASSIGNMENT_NAME === 'string' && CURRENT_ASSIGNMENT_NAME) ? CURRENT_ASSIGNMENT_NAME : String(assignmentId);
     await fetch(`${javaURI}/api/grades`, {
@@ -692,14 +694,15 @@ Check if this is a course lesson and determine which course context to use
       method: 'POST',
       body: JSON.stringify({ uid, assignment: assignmentLabel, score: null, submission: { ...content, selfAssessment }, submittedAt: new Date().toISOString() })
     }).catch(() => {}); // non-blocking — don't fail submission if grades write fails
+    return saved.autoGrade;
   }
 
-  async function submitCodeToBackend(files, description, selfAssessment) {
+  async function submitCodeToBackend(files, description, selfAssessment, courseFeedback) {
     const assignmentId = await ensureAssignmentId();
     // Resolve the user first so we don't burn a Gist creation on a request that will fail anyway.
     const { uid, personId } = await resolveCurrentUser();
     const gistUrl = await exportToGist(files, { type: 'submission', description: description || 'Code submission' });
-    const content = { type: 'code', url: gistUrl, notes: description };
+    const content = { type: 'code', url: gistUrl, notes: description, courseFeedback };
     const res = await fetch(`${javaURI}/api/submissions/${assignmentId}`, {
       ...fetchOptions,
       method: 'POST',
@@ -721,21 +724,23 @@ Check if this is a course lesson and determine which course context to use
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error || res.statusText);
     }
+    const saved = await res.json().catch(() => ({}));
     const assignmentLabel = (typeof CURRENT_ASSIGNMENT_NAME === 'string' && CURRENT_ASSIGNMENT_NAME) ? CURRENT_ASSIGNMENT_NAME : String(assignmentId);
     await fetch(`${javaURI}/api/grades`, {
       ...fetchOptions,
       method: 'POST',
       body: JSON.stringify({ uid, assignment: assignmentLabel, score: null, submission: { ...content, selfAssessment }, submittedAt: new Date().toISOString() })
     }).catch(() => {}); // non-blocking
-    return gistUrl;
+    return saved.autoGrade;
   }
 
-  async function submitFilesToBackend(files, notes, selfAssessment) {
+  async function submitFilesToBackend(files, notes, selfAssessment, courseFeedback) {
+    const autoGrades = [];
     const assignmentId = await ensureAssignmentId();
     const { uid, personId } = await resolveCurrentUser();
     const assignmentName = await resolveAssignmentName();
     for (const file of files) {
-      const content = { type: 'file', filename: file.name, notes: notes || '' };
+      const content = { type: 'file', filename: file.name, notes: notes || '', courseFeedback };
       const fd = new FormData();
       fd.append('assignmentName', assignmentName);
       fd.append('assignmentId', String(assignmentId));
@@ -748,6 +753,7 @@ Check if this is a course lesson and determine which course context to use
       fd.append('workHabits', String(selfAssessment.workHabits));
       fd.append('aiOrchestration', String(selfAssessment.aiOrchestration));
       fd.append('selfAssessmentReflection', selfAssessment.selfAssessmentReflection);
+      fd.append('courseFeedback', JSON.stringify(courseFeedback));
       const r = await fetch(`${javaURI}/api/assignment-submissions/upload`, {
         method: 'POST',
         mode: fetchOptions.mode,
@@ -759,6 +765,8 @@ Check if this is a course lesson and determine which course context to use
         const e = await r.json().catch(() => ({}));
         throw new Error(`Upload failed for ${file.name}: ` + (e.error || r.statusText));
       }
+      const uploaded = await r.json().catch(() => ({}));
+      if (uploaded.autoGrade) autoGrades.push(uploaded.autoGrade);
       // Dual-write to EshikaP1's grades system
       const assignmentLabel = (typeof CURRENT_ASSIGNMENT_NAME === 'string' && CURRENT_ASSIGNMENT_NAME) ? CURRENT_ASSIGNMENT_NAME : String(assignmentId);
       await fetch(`${javaURI}/api/grades`, {
@@ -767,6 +775,8 @@ Check if this is a course lesson and determine which course context to use
         body: JSON.stringify({ uid, assignment: assignmentLabel, score: null, submission: { ...content, selfAssessment }, submittedAt: new Date().toISOString() })
       }).catch(() => {}); // non-blocking
     }
+    // Several files can be uploaded; surface the most informative review (a graded one if any).
+    return autoGrades.find(g => g.status === 'graded') || autoGrades[0];
   }
 
   /**
@@ -814,6 +824,31 @@ Check if this is a course lesson and determine which course context to use
         status.style.display = 'none';
       }, STATUS_AUTO_HIDE_MS);
     }
+  }
+
+  /**
+   * Show what the instant AI reviewer did with a submission. Separate from showStatus
+   * because that banner auto-hides, and feedback needs to stay on screen to be read.
+   * A missing review is shown too, so a silent skip never looks like "no AI here".
+   */
+  function showAutoGradeResult(autoGrade) {
+    const panel = document.getElementById('ai-review-result');
+    if (!panel) return;
+    if (!autoGrade) {
+      panel.hidden = true;
+      return;
+    }
+    const graded = autoGrade.status === 'graded';
+    const heading = document.createElement('strong');
+    heading.innerHTML = '<i class="fa-solid fa-robot" aria-hidden="true"></i> ';
+    heading.append(graded ? `AI review: ${autoGrade.score}/5` : 'AI review did not run');
+    const body = document.createElement('p');
+    body.textContent = graded
+      ? autoGrade.feedback
+      : `${autoGrade.message || 'No reason given.'} Your submission was still saved.`;
+    panel.className = `ai-review-result ${graded ? 'graded' : 'skipped'}`;
+    panel.replaceChildren(heading, body);
+    panel.hidden = false;
   }
 
   /**
@@ -933,16 +968,55 @@ Check if this is a course lesson and determine which course context to use
   }
 
   function setupSelfAssessmentRatings() {
-    const container = document.getElementById('self-assessment');
-    if (!container) return;
-    container.addEventListener('change', (e) => {
-      const input = e.target;
-      if (input.tagName !== 'INPUT' || input.type !== 'radio') return;
-      const group = input.closest('.rating-scale');
-      if (!group) return;
-      group.querySelectorAll('.rating-option').forEach(opt => opt.classList.remove('selected'));
-      input.closest('.rating-option')?.classList.add('selected');
+    ['self-assessment', 'course-feedback'].forEach(id => {
+      const container = document.getElementById(id);
+      if (!container) return;
+      container.addEventListener('change', (e) => {
+        const input = e.target;
+        if (input.tagName !== 'INPUT' || input.type !== 'radio') return;
+        const group = input.closest('.rating-scale');
+        if (!group) return;
+        group.querySelectorAll('.rating-option').forEach(opt => opt.classList.remove('selected'));
+        input.closest('.rating-option')?.classList.add('selected');
+      });
     });
+  }
+
+  function getCourseFeedbackData() {
+    const rating = (field) => {
+      const checked = document.querySelector(`input[name="cf-${field}"]:checked`);
+      return checked ? parseInt(checked.value, 10) : null;
+    };
+    const text = (id) => document.getElementById(id)?.value.trim() || '';
+    return {
+      teachingQuality: rating('teachingQuality'),
+      homeworkQuality: rating('homeworkQuality'),
+      pros: [text('course-feedback-pro-1'), text('course-feedback-pro-2')],
+      grow: text('course-feedback-grow'),
+    };
+  }
+
+  function resetCourseFeedback() {
+    const container = document.getElementById('course-feedback');
+    if (!container) return;
+    container.querySelectorAll('input[type="radio"]').forEach(input => {
+      input.checked = false;
+      input.closest('.rating-option')?.classList.remove('selected');
+    });
+    container.querySelectorAll('input[type="text"]').forEach(input => { input.value = ''; });
+  }
+
+  /** Reads both surveys; returns { error } or { selfAssessment, courseFeedback }. */
+  function readSurveys() {
+    const selfAssessment = getSelfAssessmentData();
+    const courseFeedback = getCourseFeedbackData();
+    const error = validateSelfAssessment(selfAssessment) || validateCourseFeedback(courseFeedback);
+    return error ? { error } : { selfAssessment, courseFeedback };
+  }
+
+  function resetSurveys() {
+    resetSelfAssessment();
+    resetCourseFeedback();
   }
 
   /**
@@ -984,20 +1058,20 @@ Check if this is a course lesson and determine which course context to use
           showStatus('error', 'That is not a valid GitHub issue link (expected github.com/owner/repo/issues/N).');
           return;
         }
-        const selfAssessment = getSelfAssessmentData();
-        const selfAssessmentError = validateSelfAssessment(selfAssessment);
-        if (selfAssessmentError) {
-          showStatus('error', selfAssessmentError);
+        const { error: surveyError, selfAssessment, courseFeedback } = readSurveys();
+        if (surveyError) {
+          showStatus('error', surveyError);
           return;
         }
         submitBtn.disabled = true;
         showStatus('loading', 'Submitting...');
         try {
-          await submitLinkToBackend(link, description, selfAssessment);
-          saveSubmissionLocally('link', { link, description, selfAssessment });
+          showAutoGradeResult(null);
+          showAutoGradeResult(await submitLinkToBackend(link, description, selfAssessment, courseFeedback));
+          saveSubmissionLocally('link', { link, description, selfAssessment, courseFeedback });
           showStatus('success', 'Link submitted successfully!');
           this.reset();
-          resetSelfAssessment();
+          resetSurveys();
         } catch (err) {
           showStatus('error', err.message);
         } finally {
@@ -1013,10 +1087,9 @@ Check if this is a course lesson and determine which course context to use
         const fileInput = document.getElementById('file-input');
         const notes = document.getElementById('file-notes')?.value?.trim() || '';
         const submitBtn = fileForm.querySelector('button[type="submit"]');
-        const selfAssessment = getSelfAssessmentData();
-        const selfAssessmentError = validateSelfAssessment(selfAssessment);
-        if (selfAssessmentError) {
-          showStatus('error', selfAssessmentError);
+        const { error: surveyError, selfAssessment, courseFeedback } = readSurveys();
+        if (surveyError) {
+          showStatus('error', surveyError);
           return;
         }
         submitBtn.disabled = true;
@@ -1027,13 +1100,14 @@ Check if this is a course lesson and determine which course context to use
               throw new Error(`${file.name} exceeds ${FILE_SIZE_LIMIT_MB}MB limit.`);
             }
           }
-          await submitFilesToBackend(Array.from(fileInput.files), notes, selfAssessment);
-          saveSubmissionLocally('file', { files: Array.from(fileInput.files).map(f => f.name), notes, selfAssessment });
+          showAutoGradeResult(null);
+          showAutoGradeResult(await submitFilesToBackend(Array.from(fileInput.files), notes, selfAssessment, courseFeedback));
+          saveSubmissionLocally('file', { files: Array.from(fileInput.files).map(f => f.name), notes, selfAssessment, courseFeedback });
           showStatus('success', `${fileInput.files.length} file(s) submitted successfully!`);
           fileInput.value = '';
           updateFileListDisplay();
           this.reset();
-          resetSelfAssessment();
+          resetSurveys();
         } catch (err) {
           showStatus('error', err.message);
         } finally {
@@ -1045,6 +1119,9 @@ Check if this is a course lesson and determine which course context to use
     const codeForm = document.getElementById('code-form');
     if (codeForm) {
       renderCodeRunnerSummary();
+      // The summary was only drawn once at load, so it kept saying "not saved yet"
+      // after the student pressed 💾. Redraw whenever a runner saves or clears.
+      window.addEventListener('runner-storage-change', renderCodeRunnerSummary);
       codeForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         const notes = document.getElementById('code-notes')?.value?.trim() || '';
@@ -1058,10 +1135,9 @@ Check if this is a course lesson and determine which course context to use
           showStatus('error', "No saved code found in this lesson's code runner(s).");
           return;
         }
-        const selfAssessment = getSelfAssessmentData();
-        const selfAssessmentError = validateSelfAssessment(selfAssessment);
-        if (selfAssessmentError) {
-          showStatus('error', selfAssessmentError);
+        const { error: surveyError, selfAssessment, courseFeedback } = readSurveys();
+        if (surveyError) {
+          showStatus('error', surveyError);
           return;
         }
         submitBtn.disabled = true;
@@ -1073,13 +1149,14 @@ Check if this is a course lesson and determine which course context to use
           submitBtn.disabled = false;
           return;
         }
-        showStatus('loading', 'Creating Gist and submitting...');
+        showStatus('loading', 'Creating Gist, submitting, and running AI review...');
         try {
-          await submitCodeToBackend(files, notes, selfAssessment);
-          saveSubmissionLocally('code', { notes, selfAssessment });
+          showAutoGradeResult(null);
+          showAutoGradeResult(await submitCodeToBackend(files, notes, selfAssessment, courseFeedback));
+          saveSubmissionLocally('code', { notes, selfAssessment, courseFeedback });
           showStatus('success', 'Code submitted successfully!');
           this.reset();
-          resetSelfAssessment();
+          resetSurveys();
         } catch (err) {
           showStatus('error', err.message);
         } finally {
@@ -1673,6 +1750,28 @@ Check if this is a course lesson and determine which course context to use
     border: 1px solid #3b82f6;
     color: #1d4ed8;
   }
+
+  .ai-review-result {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+  }
+
+  .ai-review-result p {
+    margin: 6px 0 0;
+  }
+
+  .ai-review-result.graded {
+    background: #dcfce7;
+    border: 1px solid #16a34a;
+    color: #14532d;
+  }
+
+  .ai-review-result.skipped {
+    background: #fef3c7;
+    border: 1px solid #d97706;
+    color: #78350f;
+  }
 </style>
 
 <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
@@ -2122,6 +2221,7 @@ Check if this is a course lesson and determine which course context to use
         // (like all module scripts) runs deferred - only after DOMContentLoaded is it
         // guaranteed to have executed, so the summary render waits for that event too.
         document.addEventListener('DOMContentLoaded', renderCodeRunnerSummaryBlog);
+        window.addEventListener('runner-storage-change', renderCodeRunnerSummaryBlog);
         codeFormBlog.addEventListener('submit', async function (e) {
           e.preventDefault();
           const notes = document.getElementById('code-notes-blog')?.value?.trim() || '';

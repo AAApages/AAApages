@@ -58,6 +58,7 @@ export function createCreatorDashboard(options) {
     getFilterStatus,
     escapeHtml,
     cellTitle,
+    renderCourseFeedback,
   } = options;
 
   let assignments = [];
@@ -209,6 +210,9 @@ export function createCreatorDashboard(options) {
       `${filtered.length} submission${filtered.length === 1 ? "" : "s"} · ${pending} pending · ${late} late · ${graded} graded`;
     renderSubmissionTable(visibleRows);
     renderPagination(filtered.length, totalPages);
+    // Summarize every filtered row, not just the visible page.
+    const courseFeedback = element("creator-course-feedback");
+    if (courseFeedback && renderCourseFeedback) courseFeedback.innerHTML = renderCourseFeedback(filtered);
   }
 
   function bindInteractions() {

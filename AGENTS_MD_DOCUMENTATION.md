@@ -137,6 +137,13 @@ Names should:
 
 * **Update this file:** As you iterate, make mistakes, and learn new system patterns or constraints, actively update `AGENTS.md` (and its optimized counterpart) with important notes so the system improves over time.
 
+## Assignment submissions
+
+* **Runner saved state:** `StorageManager` dispatches `runner-storage-change` on `window` on save/clear; the submission form's "saved / not saved yet" list relies on it to refresh. Don't write runner localStorage keys around `StorageManager`.
+* **Instant AI review:** Spring's submit endpoints return `autoGrade` (`graded`/`not_gradeable`/`failed` + reason); the frontend's `showAutoGradeResult` must surface it rather than silently dropping the not-graded reason.
+* **Gist keys:** Students can save a personal GitHub token on Profile (`/api/gist-key`, AES-GCM encrypted, requires `GIST_TOKEN_ENCRYPTION_KEY`); without one the server `GIST_TOKEN` is used. `PUT/DELETE /api/person/**` is admin-only, which is why the endpoint lives elsewhere.
+* **Course feedback:** The Likert course survey is stored as `content.courseFeedback` (file uploads send it as the multipart `courseFeedback` JSON field); analysis lives in [assets/js/submissions/course-feedback.js](assets/js/submissions/course-feedback.js) and the Teacher tab shows the summary.
+
 ## Anti-Patterns
 
 ### God Functions

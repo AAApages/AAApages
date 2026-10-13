@@ -113,6 +113,24 @@ active_tab: profile
         </div>
     </div>
 
+    <!-- GitHub Gist Key Section: saved separately from the profile form (own buttons, own endpoint) -->
+    <div id="gistKeySettings" class="bg-neutral-800 rounded-lg shadow-md p-6 mb-6 border-neutral-700 border">
+        <h2 class="text-xl font-semibold mb-2">GitHub Gist Key</h2>
+        <p class="text-gray-400 text-sm mb-4">Optional. Code submissions are saved as Gists. Add a GitHub
+            personal access token with the <code>gist</code> scope to create them under your own account.
+            It is stored encrypted and is never shown again.</p>
+        <div class="flex flex-wrap gap-2">
+            <input type="password" data-gist-key-input autocomplete="off" placeholder="ghp_... or github_pat_..."
+                aria-label="GitHub token"
+                class="flex-1 min-w-0 px-4 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-gray-100">
+            <button type="button" data-gist-key-save
+                class="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 focus:outline-none">Save Key</button>
+            <button type="button" data-gist-key-remove hidden
+                class="px-4 py-2 bg-neutral-700 text-white rounded-lg hover:bg-neutral-600 focus:outline-none">Remove</button>
+        </div>
+        <p data-gist-key-status class="text-sm text-gray-400 mt-3" role="status">Checking for a saved key...</p>
+    </div>
+
     <div class="bg-neutral-800 rounded-lg shadow-md p-6 mb-6 border-neutral-700 border">
         <h2 class="text-xl font-semibold mb-6">Select Your Persona</h2>
 
@@ -298,6 +316,11 @@ active_tab: profile
         Save Changes
     </button>
 </div>
+
+<script type="module">
+    import { initGistKeySettings } from '{{site.baseurl}}/assets/js/gist-key-settings.js';
+    initGistKeySettings(document.getElementById('gistKeySettings'));
+</script>
 
 <!-- toasts -->
 <script type="module">

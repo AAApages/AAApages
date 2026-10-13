@@ -76,6 +76,54 @@
     </div>
   </div>
 
+  <!-- Course survey for teachers (stored as content.courseFeedback); field names must match assets/js/submissions/course-feedback.js -->
+  <div class="self-assessment course-feedback" id="course-feedback">
+    <h4 class="self-assessment-title">
+      <i class="fas fa-comments"></i>
+      Course Feedback
+    </h4>
+    <p class="self-assessment-hint">Help your teacher improve the course. 1 = Strongly disagree &middot; 5 = Strongly agree. All fields are required.</p>
+
+    <fieldset class="rating-group" data-field="teachingQuality">
+      <legend class="rating-label">Quality of Teaching</legend>
+      <p class="rating-question">The teaching for this assignment was clear and helpful.</p>
+      <div class="rating-scale" role="radiogroup" aria-label="Quality of Teaching rating">
+        <label class="rating-option"><input type="radio" name="cf-teachingQuality" value="1"><span>1</span></label>
+        <label class="rating-option"><input type="radio" name="cf-teachingQuality" value="2"><span>2</span></label>
+        <label class="rating-option"><input type="radio" name="cf-teachingQuality" value="3"><span>3</span></label>
+        <label class="rating-option"><input type="radio" name="cf-teachingQuality" value="4"><span>4</span></label>
+        <label class="rating-option"><input type="radio" name="cf-teachingQuality" value="5"><span>5</span></label>
+      </div>
+      <div class="rating-scale-hint">1 Strongly disagree &middot; 3 Neutral &middot; 5 Strongly agree</div>
+    </fieldset>
+
+    <fieldset class="rating-group" data-field="homeworkQuality">
+      <legend class="rating-label">Quality of Homework</legend>
+      <p class="rating-question">This homework was worthwhile and well designed.</p>
+      <div class="rating-scale" role="radiogroup" aria-label="Quality of Homework rating">
+        <label class="rating-option"><input type="radio" name="cf-homeworkQuality" value="1"><span>1</span></label>
+        <label class="rating-option"><input type="radio" name="cf-homeworkQuality" value="2"><span>2</span></label>
+        <label class="rating-option"><input type="radio" name="cf-homeworkQuality" value="3"><span>3</span></label>
+        <label class="rating-option"><input type="radio" name="cf-homeworkQuality" value="4"><span>4</span></label>
+        <label class="rating-option"><input type="radio" name="cf-homeworkQuality" value="5"><span>5</span></label>
+      </div>
+      <div class="rating-scale-hint">1 Strongly disagree &middot; 3 Neutral &middot; 5 Strongly agree</div>
+    </fieldset>
+
+    <div class="form-group">
+      <label for="course-feedback-pro-1">Pro #1 — something that worked well</label>
+      <input type="text" id="course-feedback-pro-1" maxlength="300">
+    </div>
+    <div class="form-group">
+      <label for="course-feedback-pro-2">Pro #2 — another thing that worked well</label>
+      <input type="text" id="course-feedback-pro-2" maxlength="300">
+    </div>
+    <div class="form-group">
+      <label for="course-feedback-grow">Grow — one thing to improve</label>
+      <input type="text" id="course-feedback-grow" maxlength="300">
+    </div>
+  </div>
+
   {% if submission_type == "link" or submission_type == "github_issue" %}
   {% if submission_type == "github_issue" %}
     {% assign link_label = "GitHub Issue Link" %}
@@ -142,4 +190,5 @@
   {% endif %}
 
   <div class="submission-status" id="submission-status"></div>
+  <div class="ai-review-result" id="ai-review-result" role="status" hidden></div>
 </section>
