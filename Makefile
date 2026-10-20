@@ -1,5 +1,8 @@
 HOST ?= localhost
 PORT ?= 4500
+# Seconds to wait for Jekyll's first build; a full site build takes ~9 min.
+# Override per run: make SERVER_TIMEOUT=1800
+SERVER_TIMEOUT ?= 900
 LOG_FILE = /tmp/jekyll$(PORT).log
 PYTHON := venv/bin/python3
 CONVERT_JOBS ?= 4
@@ -369,6 +372,9 @@ clean-generated-makefiles:
 stop:
 	@echo "Stopping server..."
 	@@lsof -ti :$(PORT) | xargs kill >/dev/null 2>&1 || true
+	@# A server still on its first build has not opened the port yet, so lsof misses it.
+	@# [j] keeps pkill from matching this recipe's own shell command line.
+	@@pkill -f "[j]ekyll serve -H $(HOST) -P $(PORT)" >/dev/null 2>&1 || true
 	@echo "Stopping logging process..."
 	@@ps aux | awk -v log_file=$(LOG_FILE) '$$0 ~ "tail -f " log_file { print $$2 }' | xargs kill >/dev/null 2>&1 || true
 	@echo "Stopping notebook watcher..."
@@ -527,7 +533,7 @@ wait-for-server:
 			grep "Server address:" $(LOG_FILE); \
 			break; \
 		fi; \
-		if [ $$COUNTER -eq 300 ]; then \
+		if [ $$COUNTER -eq $(SERVER_TIMEOUT) ]; then \
 			echo "Server timed out after $$COUNTER seconds."; \
 			echo "Review errors from $(LOG_FILE)."; \
 			cat $(LOG_FILE); \
