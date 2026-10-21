@@ -35,7 +35,7 @@ KNOWN_TARGETS := \
 	generate-makefiles build-project-includes build-registered-projects build-registered-docs build-dev-projects \
 	watch-registered-projects clean-registered-projects watch-dev-projects \
 	list-projects split-courses clean-courses clean-generated-makefiles use-minima use-cayman use-yat \
-	use-so-simple use-hydejack watch-rebuild
+	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete
 
 ###########################################
 # Capture ORIGINAL CLI Goals
@@ -611,6 +611,8 @@ help:
 	@echo "Diagnostic Commands:"
 	@echo "  make convert-check  - Check notebooks for conversion warnings"
 	@echo "  make convert-fix    - Fix identified notebook conversion issues"
+	@echo "  make lesson-check   - Check lesson frontmatter (LESSONS=\"<paths>\" to narrow)"
+	@echo "  make lesson-delete FILE=<notebook> [CONFIRM=1] [FORCE=1] - Delete a lesson and its generated copies"
 
 # Notebook diagnostic and fix targets
 convert-check:
@@ -622,6 +624,15 @@ convert-fix:
 	@echo "Running conversion fixes..."
 	@echo "️Fixing notebooks with known warnings or errors..."
 	@$(PYTHON) scripts/check_conversion_warnings.py --fix
+
+# Lesson maintenance: see scripts/lesson_check.py and scripts/lesson_delete.py
+lesson-check:
+	@$(PYTHON) scripts/lesson_check.py $(LESSONS)
+
+# Dry run unless CONFIRM=1, so a typo in FILE can't delete anything.
+lesson-delete:
+	@if [ -z "$(FILE)" ]; then echo "Error: FILE=<lesson notebook> is required"; exit 1; fi
+	@$(PYTHON) scripts/lesson_delete.py "$(FILE)" $(if $(CONFIRM),--confirm) $(if $(FORCE),--force)
 
 ###########################################
 # Project Auto-Registration
