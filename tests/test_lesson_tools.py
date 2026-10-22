@@ -6,7 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import lesson_check, lesson_delete
+from scripts import lesson_check, lesson_delete, lesson_fix, lesson_new, lesson_update
+# Use the classes the scripts raise: they import their siblings as top-level modules.
+FrontmatterEditError = lesson_update.FrontmatterEditError
+NotebookFrontmatter = lesson_update.NotebookFrontmatter
 
 GOOD_FRONTMATTER = """---
 layout: post
@@ -174,6 +177,130 @@ class LessonDeleteTests(RepositoryTestCase):
         for path in ("_projects/lessons/js/notebooks/untracked.ipynb", "_projects/lessons/js/navigation/page.md"):
             with self.assertRaises(lesson_delete.LessonDeleteError):
                 lesson_delete.plan_delete(self.root, Path(path))
+
+
+def first_cell(path):
+    return json.loads(Path(path).read_text())["cells"][0]
+
+
+def frontmatter_text(path):
+    return "".join(first_cell(path)["source"])
+
+
+class LessonUpdateTests(RepositoryTestCase):
+    LESSON = "_projects/lessons/js/notebooks/lesson.ipynb"
+
+    def setUp(self):
+        super().setUp()
+        self.path = self.write(self.LESSON, notebook(GOOD_FRONTMATTER))
+
+    def test_set_changes_one_line_and_keeps_other_formatting(self):
+        lesson_update.update_lesson(self.path, [("courses", "{ csse: { week: 7 } }")], [])
+        text = frontmatter_text(self.path)
+        self.assertIn("courses: { csse: { week: 7 } }\n", text)
+        self.assertIn('    - "student1"\n', text)  # untouched block list keeps its form
+
+    def test_permalink_change_redirects_from_the_old_url(self):
+        moved = lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [])
+        self.assertEqual(moved, ("/js/arrays/2027", "/js/lists/2027"))
+        data = NotebookFrontmatter(self.path).data()
+        self.assertEqual((data["permalink"], data["redirect_from"]), ("/js/lists/2027", ["/js/arrays/2027"]))
+
+    def test_moving_back_never_redirects_a_page_to_itself(self):
+        lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [])
+        lesson_update.update_lesson(self.path, [("permalink", "/js/arrays/2027")], [])
+        self.assertEqual(NotebookFrontmatter(self.path).data()["redirect_from"], ["/js/lists/2027"])
+
+    def test_no_redirect_option_leaves_redirect_from_out(self):
+        lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [], redirect=False)
+        self.assertNotIn("redirect_from", NotebookFrontmatter(self.path).data())
+
+    def test_update_that_adds_an_error_is_refused_and_file_is_unchanged(self):
+        before = self.path.read_text()
+        with self.assertRaises(FrontmatterEditError):
+            lesson_update.update_lesson(self.path, [], ["permalink"])
+        self.assertEqual(self.path.read_text(), before)
+
+    def test_unquoted_hash_is_refused_instead_of_truncated(self):
+        with self.assertRaises(FrontmatterEditError):
+            lesson_update.update_lesson(self.path, [("description", "AP FRQ #1 practice")], [])
+        lesson_update.update_lesson(self.path, [("title", '"Arrays #1"')], [])
+        self.assertEqual(NotebookFrontmatter(self.path).data()["title"], "Arrays #1")
+
+
+class LessonFixTests(RepositoryTestCase):
+    LESSON = "_projects/lessons/js/notebooks/lesson.ipynb"
+
+    def test_dry_run_lists_fixes_without_changing_the_file(self):
+        path = self.write(self.LESSON, notebook(GOOD_FRONTMATTER.replace("assignment_creator_uids", "assignmentcreator_uids"),
+                                                frontmatter_cell="code"))
+        before = path.read_text()
+        self.assertEqual(len(lesson_fix.planned_fixes(path)), 2)
+        self.assertEqual(path.read_text(), before)
+
+    def test_fixes_rename_the_key_and_move_frontmatter_to_a_raw_cell(self):
+        path = self.write(self.LESSON, notebook(GOOD_FRONTMATTER.replace("assignment_creator_uids", "assignmentcreator_uids"),
+                                                frontmatter_cell="code"))
+        lesson_fix.apply_fixes(path)
+        self.assertEqual(first_cell(path)["cell_type"], "raw")
+        self.assertEqual(lesson_check.check_lesson(lesson_check.Lesson.load(path)), [])
+
+    def test_ambiguous_misspelling_is_left_for_a_person(self):
+        path = self.write(self.LESSON, notebook(GOOD_FRONTMATTER + "").replace(
+            "assignment_creator_uids", "assignment_submission_uids"))
+        self.assertEqual(lesson_fix.planned_fixes(path), [])
+
+
+class LessonNewTests(RepositoryTestCase):
+    CONVENTIONS = ("permalink: /js/{slug}/2027\nhomework_permalink: /js/{slug}/hw\nlesson_language: JavaScript\n"
+                   "categories: [JavaScript]\nassignment: true\nassignment_submission_type: code\n")
+
+    def setUp(self):
+        super().setUp()
+        self.write("_projects/lessons/js/lesson-conventions.yml", self.CONVENTIONS)
+        (self.root / "_projects/lessons/js/notebooks").mkdir(parents=True)
+
+    def create(self, topic="Object Literals", **options):
+        options.setdefault("creators", ["student1"])
+        options.setdefault("date", "2026-10-22")
+        return lesson_new.create_lesson(self.root, "js", topic, "Learn objects", **options)
+
+    def test_new_lesson_follows_conventions_and_passes_lesson_check(self):
+        path = self.create(course="csse", week=6)
+        self.assertEqual(path.name, "2026-10-22-object-literals.ipynb")
+        data = NotebookFrontmatter(path).data()
+        self.assertEqual(data["permalink"], "/js/object-literals/2027")
+        self.assertEqual(data["categories"], ["JavaScript", "Object-Literals"])
+        self.assertEqual(data["courses"], {"csse": {"week": 6}})
+        self.assertIn("courses: { csse: { week: 6 } }\n", frontmatter_text(path))
+        self.assertEqual(lesson_check.check_lesson(lesson_check.Lesson.load(path)), [])
+
+    def test_homework_sample_uses_the_homework_permalink_and_delimiters(self):
+        notebook_text = self.create().read_text()
+        self.assertIn("permalink: /js/object-literals/hw", notebook_text)
+        self.assertIn("```yaml\\n---\\n", notebook_text)
+
+    def test_cell_ids_are_stable(self):
+        ids = [cell["id"] for cell in json.loads(self.create().read_text())["cells"]]
+        self.assertEqual(len(set(ids)), len(ids))
+        self.assertEqual(ids[0], lesson_new._cell_id("/js/object-literals/2027", 0))
+
+    def test_refusals(self):
+        self.create()
+        cases = {
+            "duplicate permalink": dict(topic="Object Literals", date="2026-10-23"),
+            "no creators for an assignment project": dict(topic="Maps", creators=[]),
+            "course without week": dict(topic="Sets", course="csse"),
+            "bad date": dict(topic="Sets", date="10/22/2026"),
+        }
+        for name, options in cases.items():
+            with self.subTest(name), self.assertRaises(lesson_new.LessonNewError):
+                self.create(**options)
+
+    def test_project_without_conventions_is_refused(self):
+        (self.root / "_projects/lessons/py/notebooks").mkdir(parents=True)
+        with self.assertRaises(lesson_new.LessonNewError):
+            lesson_new.create_lesson(self.root, "py", "Maps", "d", ["a"], date="2026-10-22")
 
 
 if __name__ == "__main__":
