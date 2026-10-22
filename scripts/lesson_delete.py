@@ -56,7 +56,7 @@ def plan_delete(root: Path, source: Path) -> DeletePlan:
 
     plan = DeletePlan(source=source, permalink=permalink)
     plan.files = [source] + [path for path in _generated_files(root, source, frontmatter) if path.exists()]
-    plan.references = _references(root, permalink, exclude=source)
+    plan.references = find_references(root, permalink, exclude=source)
     if frontmatter.get("assignment"):
         plan.assignment_url = content_url_for(root, source, frontmatter)
     return plan
@@ -101,7 +101,8 @@ def _converter_output(root: Path, notebook: Path) -> Path:
         convert_notebooks.repository_root = saved_root
 
 
-def _references(root: Path, permalink: str | None, exclude: Path):
+def find_references(root: Path, permalink: str | None, exclude: Path):
+    """`path:line: text` lines in tracked files, other than `exclude`, that link to `permalink`."""
     if not permalink:
         return []
     needle = permalink.rstrip("/") or "/"

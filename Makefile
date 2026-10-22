@@ -35,7 +35,7 @@ KNOWN_TARGETS := \
 	generate-makefiles build-project-includes build-registered-projects build-registered-docs build-dev-projects \
 	watch-registered-projects clean-registered-projects watch-dev-projects \
 	list-projects split-courses clean-courses clean-generated-makefiles use-minima use-cayman use-yat \
-	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete
+	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete lesson-new lesson-update lesson-fix
 
 ###########################################
 # Capture ORIGINAL CLI Goals
@@ -613,6 +613,9 @@ help:
 	@echo "  make convert-fix    - Fix identified notebook conversion issues"
 	@echo "  make lesson-check   - Check lesson frontmatter (LESSONS=\"<paths>\" to narrow)"
 	@echo "  make lesson-delete FILE=<notebook> [CONFIRM=1] [FORCE=1] - Delete a lesson and its generated copies"
+	@echo "  make lesson-new PROJECT=<p> TOPIC=\"<t>\" DESCRIPTION=\"<d>\" CREATORS=<uids> [COURSE=<c> WEEK=<n>] - Create a lesson"
+	@echo "  make lesson-update FILE=<notebook> SET=\"k=v;k=v\" [UNSET=\"k\"] - Edit frontmatter (permalink changes add a redirect)"
+	@echo "  make lesson-fix [LESSONS=\"<paths>\"] [CONFIRM=1] - Apply fixes that have one right answer"
 
 # Notebook diagnostic and fix targets
 convert-check:
@@ -633,6 +636,24 @@ lesson-check:
 lesson-delete:
 	@if [ -z "$(FILE)" ]; then echo "Error: FILE=<lesson notebook> is required"; exit 1; fi
 	@$(PYTHON) scripts/lesson_delete.py "$(FILE)" $(if $(CONFIRM),--confirm) $(if $(FORCE),--force)
+
+# Conventions come from _projects/<category>/$(PROJECT)/lesson-conventions.yml.
+lesson-new:
+	@if [ -z "$(PROJECT)" ] || [ -z "$(TOPIC)" ] || [ -z "$(DESCRIPTION)" ]; then \
+		echo "Error: PROJECT=, TOPIC= and DESCRIPTION= are required (plus CREATORS= for assignment projects)"; exit 1; fi
+	@$(PYTHON) scripts/lesson_new.py "$(PROJECT)" "$(TOPIC)" --description "$(DESCRIPTION)" --creators "$(CREATORS)" \
+		$(if $(AUTHOR),--author "$(AUTHOR)") $(if $(COURSE),--course "$(COURSE)") $(if $(WEEK),--week "$(WEEK)") \
+		$(if $(DATE),--date "$(DATE)")
+
+# SET takes `key=value` pairs separated by `;`. A permalink change adds a redirect from the old URL.
+lesson-update:
+	@if [ -z "$(FILE)" ]; then echo "Error: FILE=<lesson notebook> is required"; exit 1; fi
+	@$(PYTHON) scripts/lesson_update.py "$(FILE)" --sets "$(SET)" $(foreach key,$(UNSET),--unset $(key)) \
+		$(if $(NO_REDIRECT),--no-redirect)
+
+# Dry run unless CONFIRM=1.
+lesson-fix:
+	@$(PYTHON) scripts/lesson_fix.py $(LESSONS) $(if $(CONFIRM),--confirm)
 
 ###########################################
 # Project Auto-Registration
