@@ -200,6 +200,16 @@ class LessonUpdateTests(RepositoryTestCase):
         self.assertIn("courses: { csse: { week: 7 } }\n", text)
         self.assertIn('    - "student1"\n', text)  # untouched block list keeps its form
 
+    def test_edit_keeps_whether_the_cell_ended_with_a_newline(self):
+        self.write(self.LESSON, notebook(GOOD_FRONTMATTER.rstrip("\n")))
+        lesson_update.update_lesson(self.path, [("title", "Lists")], [])
+        self.assertTrue(frontmatter_text(self.path).endswith("---"))
+
+    def test_edit_keeps_the_files_json_indent(self):
+        self.path.write_text(json.dumps(json.loads(self.path.read_text()), indent=2) + "\n")
+        lesson_update.update_lesson(self.path, [("title", "Lists")], [])
+        self.assertTrue(self.path.read_text().startswith('{\n  "cells"'))
+
     def test_permalink_change_redirects_from_the_old_url(self):
         moved = lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [])
         self.assertEqual(moved, ("/js/arrays/2027", "/js/lists/2027"))

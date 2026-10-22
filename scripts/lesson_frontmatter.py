@@ -30,7 +30,9 @@ class NotebookFrontmatter:
         if not cells:
             raise FrontmatterEditError(f"{path} has no cells")
         source = cells[0].get("source", "")
-        lines = ("".join(source) if isinstance(source, list) else source).splitlines()
+        text = "".join(source) if isinstance(source, list) else source
+        self.ends_with_newline = text.endswith("\n")  # kept on save, so the diff is only the edit
+        lines = text.splitlines()
         if len(lines) < 2 or lines[0].strip() != "---" or "---" not in (line.strip() for line in lines[1:]):
             raise FrontmatterEditError(f"{path} first cell is not --- delimited frontmatter")
         self.closing = next(i for i, line in enumerate(lines) if i > 0 and line.strip() == "---")
@@ -87,11 +89,16 @@ class NotebookFrontmatter:
 
     def save(self):
         self.data()  # fail before writing if an edit broke the YAML
-        text = "\n".join(self.lines) + "\n"
+        text = "\n".join(self.lines) + ("\n" if self.ends_with_newline else "")
         self.first_cell["source"] = text.splitlines(keepends=True)
-        # nbformat writes 1-space JSON; matching it keeps the diff to the changed lines.
-        self.path.write_text(json.dumps(self.notebook, indent=1, ensure_ascii=False)
+        # Keep the file's own JSON indent (nbformat uses 1, some editors 2) so only edited lines change.
+        self.path.write_text(json.dumps(self.notebook, indent=_json_indent(self.raw), ensure_ascii=False)
                              + ("\n" if self.raw.endswith("\n") else ""), encoding="utf-8")
+
+
+def _json_indent(raw):
+    second_line = raw.split("\n", 2)[1] if raw.count("\n") >= 2 else ""
+    return (len(second_line) - len(second_line.lstrip(" "))) or 1
 
 
 def _render(key, value_text):
