@@ -6,6 +6,7 @@ Usage:
     python3 scripts/lesson_check.py                       # default: _projects/lessons _notebooks
     python3 scripts/lesson_check.py PATH [PATH ...]       # files or directories
     make lesson-check LESSONS="_projects/lessons/java"
+    make lesson-check SINCE=origin/main                   # only lessons changed since main (PR check)
 
 Errors break something students see (a missing Submit panel creator, a lesson
 missing from its course, a homework sample Jekyll ignores) and exit 1.
@@ -250,10 +251,31 @@ def lesson_files(root: Path, paths):
             yield path
 
 
-def run(root: Path, paths):
+def changed_since(root: Path, base_ref: str):
+    """Files changed, added or untracked since the merge base with `base_ref`, so a PR is
+    judged only on the lessons it touches and not on errors already on main."""
+    def git(*args):
+        result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()} "
+                               f"(is `{base_ref}` fetched?)")
+        return result.stdout.split("\0")
+
+    merge_base = git("merge-base", base_ref, "HEAD")[0].strip()
+    changed = git("diff", "--name-only", "--diff-filter=ACMR", "-z", merge_base)
+    changed += git("ls-files", "--others", "--exclude-standard", "-z")
+    return {root / name for name in changed if name}
+
+
+def run(root: Path, paths, base_ref=None):
     lessons = [Lesson.load(path) for path in lesson_files(root, paths)]
     findings = [finding for lesson in lessons for finding in check_lesson(lesson)]
     findings += check_duplicate_permalinks(lessons)
+    if base_ref:
+        # Filter after checking every lesson, so a new permalink that clashes with an old lesson is caught.
+        changed = changed_since(root, base_ref)
+        lessons = [lesson for lesson in lessons if lesson.path in changed]
+        findings = [finding for finding in findings if finding.path in changed]
     return lessons, sorted(findings, key=lambda f: (str(f.path), f.severity, f.code))
 
 
@@ -261,16 +283,19 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("paths", nargs="*", default=list(DEFAULT_PATHS))
     parser.add_argument("--errors-only", action="store_true", help="hide warnings")
+    parser.add_argument("--changed-since", metavar="REF",
+                        help="only report lessons changed since the merge base with REF")
     args = parser.parse_args(argv)
 
-    lessons, findings = run(REPOSITORY_ROOT, args.paths)
+    lessons, findings = run(REPOSITORY_ROOT, args.paths, args.changed_since)
     shown = [f for f in findings if f.severity == "error"] if args.errors_only else findings
     for finding in shown:
         print(finding.describe(REPOSITORY_ROOT))
 
     errors = sum(f.severity == "error" for f in findings)
     warnings = len(findings) - errors
-    print(f"\nChecked {len(lessons)} lessons: {errors} errors, {warnings} warnings")
+    scope = f" changed since {args.changed_since}" if args.changed_since else ""
+    print(f"\nChecked {len(lessons)} lessons{scope}: {errors} errors, {warnings} warnings")
     return 1 if errors else 0
 
 

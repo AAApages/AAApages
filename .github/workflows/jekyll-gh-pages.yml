@@ -33,6 +33,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # A PR checkout is a merge commit; depth 2 keeps its first parent (the base tip) for the lesson check.
+          fetch-depth: 2
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -47,6 +50,14 @@ jobs:
           python -m venv venv  # Create virtual environment
           source venv/bin/activate  # Activate the virtual environment
           pip install -r requirements.txt  # Install Python packages
+
+      # Fail fast, before the slow build, on lesson frontmatter the PR adds or edits.
+      # Errors already on main are not counted; see `make lesson-check SINCE=origin/main`.
+      - name: Check changed lesson frontmatter
+        if: github.event_name == 'pull_request'
+        run: |
+          source venv/bin/activate
+          python scripts/lesson_check.py --changed-since HEAD^1
 
       - name: Build registered projects
         run: |

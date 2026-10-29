@@ -120,6 +120,48 @@ class LessonCheckTests(RepositoryTestCase):
             lesson_check.run(self.root, ["_projects/does-not-exist"])
 
 
+class LessonCheckChangedSinceTests(RepositoryTestCase):
+    """The PR check: only lessons the branch touched can fail it."""
+    OLD = "_projects/lessons/js/notebooks/old.ipynb"
+    NEW = "_projects/lessons/js/notebooks/new.ipynb"
+
+    def setUp(self):
+        super().setUp()
+        self.git("checkout", "-q", "-b", "main")
+        self.write(self.OLD, notebook(GOOD_FRONTMATTER.replace("description: Learn arrays\n", "")))
+        self.git("commit", "-q", "-m", "base with an existing error")
+        self.git("checkout", "-q", "-b", "feature")
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=self.root, check=True)
+
+    def findings(self):
+        _, findings = lesson_check.run(self.root, ["_projects/lessons"], base_ref="main")
+        return [(f.path.name, f.code) for f in findings]
+
+    def test_errors_already_on_main_do_not_fail_an_unrelated_branch(self):
+        self.write(self.NEW, notebook(GOOD_FRONTMATTER.replace("2027", "2028")))
+        self.git("commit", "-q", "-m", "good lesson")
+        self.assertEqual(self.findings(), [])
+
+    def test_new_lesson_errors_are_reported_committed_or_not(self):
+        self.write(self.NEW, notebook(GOOD_FRONTMATTER.replace("2027", "2028").replace(
+            "courses: { csse: { week: 6 } }", "courses: csse")), track=False)
+        self.assertEqual(self.findings(), [("new.ipynb", "malformed-courses")])
+
+    def test_editing_an_old_lesson_requires_fixing_it(self):
+        self.write(self.OLD, notebook(GOOD_FRONTMATTER.replace("description: Learn arrays\n", "").replace("Arrays", "Lists")))
+        self.assertEqual(self.findings(), [("old.ipynb", "missing-field")])
+
+    def test_new_permalink_clashing_with_an_unchanged_lesson_is_reported_on_the_new_one(self):
+        self.write(self.NEW, notebook(GOOD_FRONTMATTER))
+        self.assertEqual(self.findings(), [("new.ipynb", "duplicate-permalink")])
+
+    def test_unknown_base_ref_fails_fast(self):
+        with self.assertRaisesRegex(RuntimeError, "is `origin/nope` fetched"):
+            lesson_check.run(self.root, ["_projects/lessons"], base_ref="origin/nope")
+
+
 class LessonDeleteTests(RepositoryTestCase):
     SOURCE = "_projects/lessons/js/notebooks/2026-01-01-arrays.ipynb"
     POST = "_posts/projects/js/2026-01-01-arrays_IPYNB_2_.md"

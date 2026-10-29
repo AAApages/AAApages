@@ -629,8 +629,9 @@ convert-fix:
 	@$(PYTHON) scripts/check_conversion_warnings.py --fix
 
 # Lesson maintenance: see scripts/lesson_check.py and scripts/lesson_delete.py
+# SINCE=origin/main checks only the lessons your branch changed, as the PR build does.
 lesson-check:
-	@$(PYTHON) scripts/lesson_check.py $(LESSONS)
+	@$(PYTHON) scripts/lesson_check.py $(LESSONS) $(if $(SINCE),--changed-since "$(SINCE)")
 
 # Dry run unless CONFIRM=1, so a typo in FILE can't delete anything.
 lesson-delete:
