@@ -1,8 +1,28 @@
 import GameEnvBackground from '@assets/js/GameEnginev1.1/essentials/GameEnvBackground.js';
-import Player from '@assets/js/GameEnginev1.1/essentials/Player.js';
+import Player from './RacingPlayer.js';
 import SplineBarrier from '@assets/js/GameEnginev1.1/essentials/SplineBarrier.js';
+import Npc from '@assets/js/GameEnginev1.1/essentials/Npc.js';
 import TimeLapScreen from './TimeLapScreen.js';
 
+
+// Npc only talks while a player is touching it; the yeti talks whenever E is pressed.
+// Each press shows the next line, and the press after the last line closes the dialogue.
+class Yeti extends Npc {
+  handleKeyInteract() {
+    if (this.gameEnv.gameControl && this.gameEnv.gameControl.isPaused) {
+      return;
+    }
+    const lines = this.spriteData.dialogues;
+    // A closed dialogue (including one closed with Escape) always restarts from the first line.
+    const nextIndex = this.dialogueSystem.isDialogueOpen() ? this.lineIndex + 1 : 0;
+    if (nextIndex >= lines.length) {
+      this.dialogueSystem.closeDialogue();
+      return;
+    }
+    this.lineIndex = nextIndex;
+    this.dialogueSystem.showDialogue(lines[nextIndex], this.spriteData.id, this.spriteData.src, this.spriteData);
+  }
+}
 
 class GameLevelWinter {
   constructor(gameEnv) {
@@ -10,14 +30,14 @@ class GameLevelWinter {
     const background_data = {
       name: "Winter Course",
       greeting: "Welcome to the Winter Level!",
-      src: "/images/projects/racing-game/Winter_Track.png",
+      src: path + '/images/projects/racing-game/Winter_Track.png',
       pixels: { height: 360, width: 643 } //this is the old version im testing new sizes.
       
     };
     const player_data = {
         name: "Red Car",
         greeting: "I'm the red car!",
-        src: "/images/projects/racing-game/Directions_red_car.png",
+        src: path + '/images/projects/racing-game/Directions_red_car.png',
         SCALE_FACTOR: 10,
         STEP_FACTOR: 1100,
         INIT_POSITION: {x: 370 / 740, y: 465 / 585},
@@ -33,6 +53,26 @@ class GameLevelWinter {
         upLeft:    { row: 2, start: 0, columns: 1, rotate: Math.PI },
         hitbox: { widthPercentage: 0.5, heightPercentage: 0.5 },
         keypress: { up: 87, left: 65, down: 83, right: 68 } // W, A, S, D
+    }
+    const other_data = {
+        name: "Blue Car",
+        greeting: "I'm the blue car!",
+        src: path + '/images/projects/racing-game/Directions_blue_car.png',
+        SCALE_FACTOR: 10,
+        STEP_FACTOR: 1100,
+        INIT_POSITION: {x: 340 / 740, y: 500 / 585},
+        pixels: { height: 1024, width: 1536 },
+        orientation: { rows: 4, columns: 4 },
+        up:        { row: 3, start: 0, columns: 1 },
+        upRight:   { row: 0, start: 2, columns: 1, rotate: Math.PI },
+        right:     { row: 3, start: 2, columns: 1, rotate: Math.PI },
+        downRight: { row: 2, start: 0, columns: 1 },
+        down:      { row: 0, start: 0, columns: 1 },
+        downLeft:  { row: 0, start: 2, columns: 1 },
+        left:      { row: 3, start: 2, columns: 1 },
+        upLeft:    { row: 2, start: 0, columns: 1, rotate: Math.PI },
+        hitbox: { widthPercentage: 0.5, heightPercentage: 0.5 },
+        keypress: { up: 38, left: 37, down: 40, right: 39 } // Arrow keys
     }
  
     const barrierData1 = {
@@ -53,12 +93,20 @@ class GameLevelWinter {
     };
 
 
+    // Finish line on the painted start/finish line; HUD in the trees above the top-left corner.
+    const lap_data = {
+      totalLaps: 3,
+      finishLine: { x: 0.5, top: 0.764, bottom: 0.864 },
+      hudPosition: { x: 0.01, y: 0.02 }
+    };
+
     this.classes = [
       { class: GameEnvBackground, data: background_data },
       { class: Player, data: player_data },
+      { class: Player, data: other_data },
       { class: SplineBarrier, data: barrierData1 },
       { class: SplineBarrier, data: barrierData2 },
-      { class: TimeLapScreen, data: { currentLap: 1, totalLaps: 3 } }
+      { class: TimeLapScreen, data: lap_data }
     ];
   }
 }

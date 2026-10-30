@@ -18,6 +18,7 @@ venv/
 .venv
 port_venv/
 verifyTools.md
+setup-report.md
 _notebooks/CSP/big-ideas/big-idea-3-part-1-fundamentals/Period3/2024-9-27-fundamentals-3.6.4.ipynb
 .vscode/
 .bundle
@@ -75,9 +76,19 @@ images/projects/
 /_includes/topics-document-nav.html
 /_plugins/topics.rb
 /_data/topics_primary.yml
+/_data/topics_units.yml
 /navigation/search.md
 /navigation/topics.md
 /assets/js/topics/
+
+# Profile system distributions (authoritative sources in _projects/systems/profile)
+/navigation/authentication/profile.md
+/navigation/authentication/profile-v2.md
+/_layouts/profile.html
+/_includes/profile-gist-connection.html
+/_includes/profile-ai-connections.html
+/assets/js/profile/
+/_sass/open-coding/profile-gist-connection.scss
 /_includes/post_list_image_card.html
 /_includes/announcement_calendar_demo.html
 /_includes/ocs_calendar_card.html
@@ -99,6 +110,7 @@ images/projects/
 /_data/csp.yml
 /_data/csse.yml
 /_data/csh.yml
+/_data/sprint-intro/
 /navigation/course.md
 /navigation/blog.md
 /assets/js/course-entry.js
@@ -107,6 +119,7 @@ images/projects/
 /assets/js/lesson-completion-bigsix.js
 /assets/js/lessonbase.js
 /assets/js/lessonbasecapture.js
+/assets/js/blogs/
 /assets/js/chat/calendar/
 /_sass/open-coding/lesson-player.scss
 /_sass/open-coding/blogs.scss
@@ -120,8 +133,8 @@ _projects/*/*/Makefile
 !_projects/_template/Makefile
 # Existing versioned overrides remain tracked; force-add any new intentional override.
 
-# Personal make_test notebook list (created by ./make_test on first run)
-make_test_notebooks.txt
+# Personal omake notebook list (created by ./omake on first run)
+omake_notebooks.txt
 
 # Project pages (deployed from _projects/ at build time to _posts/)
 _posts/projects/
@@ -150,3 +163,4 @@ _notebooks/**/*_content.md
 
 # Local Python venv; may be a symlink to a machine-specific path, which venv/ does not match
 /venv
+.gstack/

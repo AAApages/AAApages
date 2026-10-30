@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# Fast test mode wrapper. See Makefile.test for details.
-cd "$(dirname "$0")" && exec make --no-print-directory -f Makefile.test "$@"
