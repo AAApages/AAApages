@@ -35,7 +35,7 @@ KNOWN_TARGETS := \
 	generate-makefiles build-project-includes build-registered-projects build-registered-docs build-dev-projects \
 	watch-registered-projects clean-registered-projects clean-removed-projects watch-dev-projects \
 	list-projects split-courses clean-courses clean-generated-makefiles use-minima use-cayman use-yat \
-	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete lesson-new lesson-update lesson-fix
+	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete lesson-new lesson-update lesson-fix pr-check
 
 ###########################################
 # Capture ORIGINAL CLI Goals
@@ -616,6 +616,7 @@ help:
 	@echo "Diagnostic Commands:"
 	@echo "  make convert-check  - Check notebooks for conversion warnings"
 	@echo "  make convert-fix    - Fix identified notebook conversion issues"
+	@echo "  make pr-check       - Run before opening a PR: the lesson check the PR build runs"
 	@echo "  make lesson-check   - Check lesson frontmatter (LESSONS=\"<paths>\" to narrow)"
 	@echo "  make lesson-delete FILE=<notebook> [CONFIRM=1] [FORCE=1] - Delete a lesson and its generated copies"
 	@echo "  make lesson-new PROJECT=<p> TOPIC=\"<t>\" DESCRIPTION=\"<d>\" CREATORS=<uids> [COURSE=<c> WEEK=<n>] - Create a lesson"
@@ -633,8 +634,12 @@ convert-fix:
 	@echo "️Fixing notebooks with known warnings or errors..."
 	@$(PYTHON) scripts/check_conversion_warnings.py --fix
 
+# Run before opening a PR. The Pages build runs the same check and fails the PR on any error.
+pr-check:
+	@$(PYTHON) scripts/lesson_check.py --errors-only
+
 # Lesson maintenance: see scripts/lesson_check.py and scripts/lesson_delete.py
-# SINCE=origin/main checks only the lessons your branch changed, as the PR build does.
+# SINCE=origin/main checks only the lessons your branch changed.
 lesson-check:
 	@$(PYTHON) scripts/lesson_check.py $(LESSONS) $(if $(SINCE),--changed-since "$(SINCE)")
 
