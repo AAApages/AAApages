@@ -248,6 +248,8 @@ def lesson_files(root: Path, paths):
         if path.suffix in LESSON_EXTENSIONS and ".ipynb_checkpoints" not in path.parts and path.is_file():
             if path.suffix == ".md" and parse_frontmatter(path.read_text(encoding="utf-8")) is None:
                 continue  # READMEs and docs without frontmatter are not lessons
+            if path.suffix == ".md" and Path(name).parts[0] == "_notebooks":
+                continue  # _config.yml excludes _notebooks and only notebooks are converted, so it never publishes
             yield path
 
 

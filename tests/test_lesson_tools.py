@@ -115,6 +115,12 @@ class LessonCheckTests(RepositoryTestCase):
         lessons, _ = lesson_check.run(self.root, ["_projects/lessons"])
         self.assertEqual(lessons, [])
 
+    def test_markdown_in_notebooks_folder_is_not_a_lesson(self):
+        # Jekyll excludes _notebooks and the converter only reads .ipynb, so this never publishes.
+        self.write("_notebooks/CSP/page.md", "---\ntitle: Unpublished\n---\n")
+        lessons, _ = lesson_check.run(self.root, ["_notebooks"])
+        self.assertEqual(lessons, [])
+
     def test_missing_path_fails_fast(self):
         with self.assertRaises(FileNotFoundError):
             lesson_check.run(self.root, ["_projects/does-not-exist"])
