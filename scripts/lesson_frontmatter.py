@@ -90,7 +90,9 @@ class NotebookFrontmatter:
     def save(self):
         self.data()  # fail before writing if an edit broke the YAML
         text = "\n".join(self.lines) + ("\n" if self.ends_with_newline else "")
-        self.first_cell["source"] = text.splitlines(keepends=True)
+        # nbformat allows a source to be one string or a list of lines; keep whichever the file used.
+        was_string = isinstance(json.loads(self.raw)["cells"][0].get("source"), str)
+        self.first_cell["source"] = text if was_string else text.splitlines(keepends=True)
         self.path.write_text(self._serialize(), encoding="utf-8")
 
     def _serialize(self):
@@ -111,13 +113,18 @@ FIRST_CELL_SOURCE = re.compile(r'"cells"\s*:\s*\[\s*\{.*?"source"\s*:\s*', re.S)
 
 
 def _splice_first_source(raw, source_lines, expected):
-    """`raw` with only the first cell's source array rewritten in its own indentation, or None if unsafe."""
+    """`raw` with only the first cell's source rewritten in its own indentation, or None if unsafe."""
     match = FIRST_CELL_SOURCE.search(raw)
-    if not match or not source_lines or raw[match.end()] != "[":
+    if not match or not source_lines:
         return None
     start = match.end()
     _, length = json.JSONDecoder().raw_decode(raw[start:])
+    if isinstance(source_lines, str):
+        spliced = f"{raw[:start]}{json.dumps(source_lines, ensure_ascii=False)}{raw[start + length:]}"
+        return spliced if json.loads(spliced) == expected else None
     old = raw[start:start + length]
+    if not old.startswith("["):
+        return None
     item_indent = re.match(r"\[\n([ \t]*)\S", old)
     close_indent = re.search(r"\n([ \t]*)\]$", old)
     if not (item_indent and close_indent):

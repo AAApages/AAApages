@@ -275,6 +275,12 @@ class LessonUpdateTests(RepositoryTestCase):
         changed = [(old, new) for old, new in zip(before, after) if old != new]
         self.assertEqual(changed, [('     "title: Arrays\\n",', '     "title: Lists\\n",')])
 
+    def test_edit_keeps_a_compact_notebook_with_string_sources_compact(self):
+        compact = '{"cells": [\n  ' + json.dumps({"cell_type": "raw", "metadata": {}, "source": GOOD_FRONTMATTER}) + '\n], "metadata": {}}\n'
+        self.path.write_text(compact)
+        lesson_update.update_lesson(self.path, [("title", "Lists")], [])
+        self.assertEqual(self.path.read_text(), compact.replace("title: Arrays", "title: Lists"))
+
     def test_permalink_change_redirects_from_the_old_url(self):
         moved = lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [])
         self.assertEqual(moved, ("/js/arrays/2027", "/js/lists/2027"))
