@@ -9,7 +9,7 @@ checkpoint_sprint: 4
 challenge_submit: false
 checkpoint_links:
   - {title: Class design, url: /csa/frqs/classes}
-  - {title: Search and lookup, url: /2025/01/06/search_linear_binary_hash_IPYNB_2_.html}
+  - {title: Map lookup and sets, url: /java/collectablev1}
   - {title: Merge sort, url: /2025/01/06/sort-merge_IPYNB_2_.html}
 courses: {"csa":{"week":16}}
 ---

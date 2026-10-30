@@ -161,6 +161,7 @@ Sprint4:
       - "Use HashMap for IDs, Lookups, and API Data"
       - "Compare Arrays, ArrayLists, and Lookup Costs"
       - "PBL Observation - Inspect Submitter Inheritance and Train Cargo Maps"
+    lesson_notes: "The search and HashMap document was reworked into Comparable Implementations (week 10), which now covers Map lookup and Sets. Week 14 has no dedicated HashMap lookup document, and the week 15 linear and binary search goal has no dedicated document; Java 4.14 and 4.17 are references."
   15:
     theme: "Search and Sort Integration"
     goals:
