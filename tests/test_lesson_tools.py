@@ -258,6 +258,23 @@ class LessonUpdateTests(RepositoryTestCase):
         lesson_update.update_lesson(self.path, [("title", "Lists")], [])
         self.assertTrue(self.path.read_text().startswith('{\n  "cells"'))
 
+    def test_edit_keeps_a_cell_indented_differently_from_the_file(self):
+        # Hand-edited notebooks: the frontmatter cell is indented one space deeper than the file.
+        parsed = json.loads(self.path.read_text())
+        parsed["cells"][0]["source"] = parsed["cells"][0]["source"].splitlines(keepends=True)
+        text = json.dumps(parsed, indent=1, ensure_ascii=False) + "\n"
+        frontmatter_start = text.index('"source": [') + len('"source": [')
+        frontmatter_end = text.index("]", frontmatter_start)
+        irregular = (text[:frontmatter_start]
+                     + text[frontmatter_start:frontmatter_end].replace("\n    ", "\n     ")
+                     + text[frontmatter_end:])
+        self.path.write_text(irregular)
+        lesson_update.update_lesson(self.path, [("title", "Lists")], [])
+        before, after = irregular.splitlines(), self.path.read_text().splitlines()
+        self.assertEqual(len(before), len(after))
+        changed = [(old, new) for old, new in zip(before, after) if old != new]
+        self.assertEqual(changed, [('     "title: Arrays\\n",', '     "title: Lists\\n",')])
+
     def test_permalink_change_redirects_from_the_old_url(self):
         moved = lesson_update.update_lesson(self.path, [("permalink", "/js/lists/2027")], [])
         self.assertEqual(moved, ("/js/arrays/2027", "/js/lists/2027"))

@@ -91,9 +91,41 @@ class NotebookFrontmatter:
         self.data()  # fail before writing if an edit broke the YAML
         text = "\n".join(self.lines) + ("\n" if self.ends_with_newline else "")
         self.first_cell["source"] = text.splitlines(keepends=True)
-        # Keep the file's own JSON indent (nbformat uses 1, some editors 2) so only edited lines change.
-        self.path.write_text(json.dumps(self.notebook, indent=_json_indent(self.raw), ensure_ascii=False)
-                             + ("\n" if self.raw.endswith("\n") else ""), encoding="utf-8")
+        self.path.write_text(self._serialize(), encoding="utf-8")
+
+    def _serialize(self):
+        # Hand-edited notebooks often indent a cell differently from the rest of the file, and
+        # re-dumping would re-indent it. So when only the frontmatter text changed, replace just
+        # that array. Other edits (lesson-fix changing the cell type) re-dump with the file's indent.
+        original = json.loads(self.raw)
+        original["cells"][0]["source"] = self.first_cell["source"]
+        if original == self.notebook:
+            spliced = _splice_first_source(self.raw, self.first_cell["source"], self.notebook)
+            if spliced is not None:
+                return spliced
+        return (json.dumps(self.notebook, indent=_json_indent(self.raw), ensure_ascii=False)
+                + ("\n" if self.raw.endswith("\n") else ""))
+
+
+FIRST_CELL_SOURCE = re.compile(r'"cells"\s*:\s*\[\s*\{.*?"source"\s*:\s*', re.S)
+
+
+def _splice_first_source(raw, source_lines, expected):
+    """`raw` with only the first cell's source array rewritten in its own indentation, or None if unsafe."""
+    match = FIRST_CELL_SOURCE.search(raw)
+    if not match or not source_lines or raw[match.end()] != "[":
+        return None
+    start = match.end()
+    _, length = json.JSONDecoder().raw_decode(raw[start:])
+    old = raw[start:start + length]
+    item_indent = re.match(r"\[\n([ \t]*)\S", old)
+    close_indent = re.search(r"\n([ \t]*)\]$", old)
+    if not (item_indent and close_indent):
+        return None
+    items = ",\n".join(item_indent.group(1) + json.dumps(line, ensure_ascii=False) for line in source_lines)
+    spliced = f"{raw[:start]}[\n{items}\n{close_indent.group(1)}]{raw[start + length:]}"
+    # Guard against matching the wrong array: the result must be exactly the edited notebook.
+    return spliced if json.loads(spliced) == expected else None
 
 
 def _json_indent(raw):
