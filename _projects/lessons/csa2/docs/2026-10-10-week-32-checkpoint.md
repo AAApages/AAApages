@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 32 - AP Search Sort and Recursion Review"
+description: AP review checkpoint on searching, sorting, and recursion.
 permalink: /csa/checkpoints/week-32/
 lesson_group: csa2
 lesson_type: review

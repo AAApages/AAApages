@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Stocks Game Documentation
+description: How to play the 5-Year Stocks Game, picking stocks with a virtual 10,000 dollars and seeing how they would have performed.
 permalink: /docs/stocksGame
 lesson_group: "cs112"
 articulation: {"institution":"MiraCosta College","course":"CS112"}

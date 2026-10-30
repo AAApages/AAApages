@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Screenshare Documentation
+description: How students share their screen remotely and watch streams, with turns managed by the queue.
 permalink: /docs/screenshare
 lesson_group: "cs112"
 articulation: {"institution":"MiraCosta College","course":"CS112"}

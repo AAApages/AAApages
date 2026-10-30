@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 16 - Integration Evidence and Retrospective"
+description: Sprint 4 checkpoint collecting integration evidence on class design, search, and merge sort, with a retrospective.
 permalink: /csa/checkpoints/week-16/
 lesson_group: csa2
 lesson_type: review

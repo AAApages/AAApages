@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 20 - OOP and Reliability Retrospective"
+description: Sprint 5 checkpoint reviewing abstract classes, scope and access, and text files, with a retrospective.
 permalink: /csa/checkpoints/week-20/
 lesson_group: csa2
 lesson_type: review
