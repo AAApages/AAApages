@@ -7,8 +7,8 @@ import test from "node:test";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const groups = ["cs112", "cs113", "csa1", "csa2", "ds2"];
 
-function sources(group) {
-    const project = path.join(root, "_projects", "lessons", group);
+function folderSources(folder) {
+    const project = path.join(root, "_projects", "lessons", folder);
     return ["notebooks", "docs"].flatMap(directory => {
         const folder = path.join(project, directory);
         if (!fs.existsSync(folder)) return [];
@@ -25,6 +25,12 @@ function sources(group) {
             return { filename, frontmatter: content };
         });
     });
+}
+
+// Ownership is `lesson_group`, as on the curriculum pages; a lesson may live in another project's
+// folder (the CS112 FRQs sit in csa2 next to the other FRQs).
+function sources(group) {
+    return groups.flatMap(folderSources).filter(source => scalar(source.frontmatter, "lesson_group") === group);
 }
 
 function scalar(frontmatter, key) {
@@ -45,10 +51,11 @@ test("all five curriculum projects use the shared registration and index view", 
 
 test("source ownership and articulation remain separate from scheduling", () => {
     const routes = new Set();
-    for (const group of groups) {
-        for (const { filename, frontmatter } of sources(group)) {
+    for (const folder of groups) {
+        for (const { filename, frontmatter } of folderSources(folder)) {
             assert.match(frontmatter, /^---\s*\n/);
-            assert.equal(scalar(frontmatter, "lesson_group"), group, filename);
+            const group = scalar(frontmatter, "lesson_group");
+            assert.ok(groups.includes(group), `Unknown lesson_group in ${filename}`);
             const permalink = scalar(frontmatter, "permalink");
             assert.ok(permalink, `Missing stable route: ${filename}`);
             const route = permalink.replace(/^\/|\/$/g, "");
@@ -96,7 +103,7 @@ test("weeks 13-37 retain three primary documents while allowing explicitly curat
     const practice = JSON.parse(fs.readFileSync(path.join(root, "tests", "fixtures", "csa_frq_practice.json"), "utf8"));
     const actual = {};
     const actualPractice = {};
-    for (const source of [...groups, "java"].flatMap(sources)) {
+    for (const source of [...groups, "java"].flatMap(folderSources)) {
         const week = assignedWeek(source.frontmatter);
         if (!week || week < 13) continue;
         assert.ok(week <= 37, source.filename);
@@ -139,7 +146,8 @@ test("CS112 FRQ categories are distinct from historical exam question numbers", 
             assert.ok(year >= 2014 && year <= 2025);
             assert.ok(question >= 1 && question <= 4);
             assert.ok(title.includes(`${year} Exam Q${question} - CS112`), source.filename);
-            assert.ok(source.filename.endsWith(`-${year}-exam-q${question}-cs112.ipynb`), source.filename);
+            // csa2's FRQ names drop the "exam" (and the question when the year has one CS112 FRQ).
+            assert.match(path.basename(source.filename), new RegExp(`-${year}(-(exam-)?q${question})?-cs112\\.ipynb$`), source.filename);
         }
     }
     const expectedCategories = {
@@ -184,7 +192,7 @@ test("CS112 FRQ categories are distinct from historical exam question numbers", 
 });
 
 test("closing and AP weeks revisit earlier work without creating new assignments", () => {
-    const all = [...groups, "java"].flatMap(sources);
+    const all = [...groups, "java"].flatMap(folderSources);
     const routes = new Map(all.filter(source => scalar(source.frontmatter, "permalink")).map(source => [
         scalar(source.frontmatter, "permalink").replace(/\/$/, ""), source
     ]));

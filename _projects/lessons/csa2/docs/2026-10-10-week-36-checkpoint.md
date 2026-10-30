@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 36 - Community Presentation and Growth Reflection"
+description: Sprint 9 checkpoint for the community presentation and growth reflection on graph search and sorting analysis.
 permalink: /csa/checkpoints/week-36/
 lesson_group: csa2
 lesson_type: review

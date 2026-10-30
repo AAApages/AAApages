@@ -168,4 +168,7 @@ _notebooks/**/*_content.md
 
 # Claude Code session artifacts
 .claude/
+
+# Local Python venv; may be a symlink to a machine-specific path, which venv/ does not match
+/venv
 .gstack/

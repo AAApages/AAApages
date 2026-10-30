@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 24 - Community Presentation and Reflection"
+description: Sprint 6 checkpoint for the community presentation and reflection on collections and recursion.
 permalink: /csa/checkpoints/week-24/
 lesson_group: csa2
 lesson_type: review

@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Team Teach Documentation
+description: How students sign up for team teaches and teachers see upcoming topics and who is presenting.
 permalink: /docs/teamteach
 lesson_group: "cs112"
 articulation: {"institution":"MiraCosta College","course":"CS112"}

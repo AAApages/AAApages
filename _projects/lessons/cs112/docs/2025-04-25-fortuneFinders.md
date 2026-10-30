@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Fortune Finders Documentation
+description: How to play Fortune Finders, an exploration game about the stock market where players talk to NPCs and companies to grow their balance.
 permalink: /docs/fortuneFinders
 lesson_group: "cs112"
 articulation: {"institution":"MiraCosta College","course":"CS112"}
