@@ -38,7 +38,7 @@ Sprint1:
     goals:
       - "Scrum + Standups"
       - "Kanban Boards + Burndown"
-      - "Markdown / HTML / JavaScriptChanges"
+      - "Markdown / HTML / JavaScript Changes"
       - "Update and Deploy Changes"
   3:
     theme: "Summative Coding Challenge"
@@ -57,7 +57,7 @@ Sprint1:
 Sprint2:
   title: JavaScript Foundations & Student Teaching
   direction_include: projects/courses/sprint-intro/csse-sprint-2.md
-  description: A key focus of this course is to make Web Games using JavaScript. Understanding fundamentals like control structures, data types, input/output, operators, classes, methods and parameters, basic inheritance, and documentation practices are essentiial. Students will be teaching lessons on these topics to their peers.  Each student will be responsible for a portion of the lesson, a popcorn hack, and homework.  Students will be graded on their teaching, the popcorn hack, and the homework they assign.  Students will also be graded on their participation in learning from their peers.
+  description: A key focus of this course is to make Web Games using JavaScript. Understanding fundamentals like control structures, data types, input/output, operators, classes, methods and parameters, basic inheritance, and documentation practices are essential. Students will be teaching lessons on these topics to their peers.  Each student will be responsible for a portion of the lesson, a popcorn hack, and homework.  Students will be graded on their teaching, the popcorn hack, and the homework they assign.  Students will also be graded on their participation in learning from their peers.
   start: 5
   end: 8
   5:
@@ -122,16 +122,16 @@ Sprint3:
 Sprint4:
   title: Ideating, Tinkering, Building and OOP
   direction_include: projects/courses/sprint-intro/csse-sprint-4.md
-  description: Explore the OCS GameEngine—a platform designed to make learning computer science both fun and accesible. You will work collaboratively, build games, and apply key programming concepts in a creative, team-based environment.
+  description: Explore the OCS GameEngine—a platform designed to make learning computer science both fun and accessible. You will work collaboratively, build games, and apply key programming concepts in a creative, team-based environment.
   start: 13
   end: 16
 Sprint5:
   title: Advanced Features
-  description: The Teacher will be providing topics such as local storage, leaderboard APIs, websockets, platformer and more to add to the game.  Students will be expected to learn these topics and implement them into to OCS game.  
+  description: The Teacher will be providing topics such as local storage, leaderboard APIs, websockets, platformer and more to add to the game.  Students will be expected to learn these topics and implement them into the OCS game.  
   start: 17
   end: 20
 Sprint6:
-  title: An RPG/Platformer game.
+  title: An RPG/Platformer game
   description: Trimester 2 concludes with students presenting their project at N@tM. Each person within "Student Teams" will have their own specialty within the student project. Students should be able to talk about design, make a plan, code, blog, and present features of their portion of the system.
   start: 21
   end: 24
