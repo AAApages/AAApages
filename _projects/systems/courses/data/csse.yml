@@ -72,12 +72,14 @@ Sprint2:
       - "Develop Lesson Plan"
       - "Classroom Teaching Plan"
       - "Homework and Grading Plan"
+    lesson_notes: "Student-taught JavaScript lessons from the Sprint 2 teaching calendar (Lesson Week 1): each team teaches one topic, and every student completes each lesson's homework."
   7:
     theme: "Receive Learning and Reflect"
     goals:
       - "Review Homework Progress"
       - "Adjust Plans"
       - "Peer Feedback"
+    lesson_notes: "Student-taught JavaScript lessons from the Sprint 2 teaching calendar (Lesson Week 2): each team teaches one topic, and every student completes each lesson's homework."
   8:
     theme: "Sprint Retrospective"
     goals:

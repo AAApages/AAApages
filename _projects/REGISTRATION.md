@@ -248,6 +248,31 @@ Files under `_projects/<category>/_includes/` are copied to `_includes/projects/
 - `lessons/` - Educational lessons and tutorials  
 - `systems/` - Tools, utilities, and infrastructure projects
 
+### Lesson Frontmatter Standards
+
+Every lesson needs `layout`, `title`, a plain-text `description` (no Liquid, no `#`),
+an explicit `permalink`, `courses` as a map of weeks, and `lesson_type`.
+`make lesson-check` enforces these; `make pr-check` runs it on every PR.
+
+Homework uses one model in both scopes: the lesson embeds a sample frontmatter block
+that students copy into a raw cell at the top of their own homework notebook. The
+sample sits in a markdown cell, inside a fenced `yaml` block, with `---` on both sides.
+
+| Scope | Lesson permalink | Lesson title | Homework permalink | Homework title |
+| --- | --- | --- | --- | --- |
+| CSSE / JavaScript (`lessons/javascript`) | `/js/<topic>/2027` | `<Topic>` | `/js/<topic>/hw` | `<Topic> HW` |
+| CSA Java Units 1–2 (`lessons/java`) | `/csa/unit_0N/N_M` | `N.MM <Topic>` | `/csa/unit_0N/N_M_hw` | `CSA Unit N.MM <Topic> HW` |
+
+`<topic>` is the lowercase-hyphen slug (`Object Literals` → `object-literals`).
+JavaScript's values live in `lessons/javascript/lesson-conventions.yml`, which
+`make lesson-new` reads. Java has no conventions file because `lesson-new` only fills
+`{slug}`, not unit and lesson numbers; create Java lessons by hand to this table.
+
+These standards apply to new lessons. Existing Java lessons keep their current URLs,
+including the older `/homework` and `_homework` homework pages in Unit 1, so no
+student or teacher links break. Any rename must go through `make lesson-update`,
+which adds `redirect_from`.
+
 ### Auto-Generated Makefiles (No Manual Creation Required!)
 
 **The build system automatically generates Makefiles** for all registered projects:
