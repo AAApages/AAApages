@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 30 - AP Methods and Classes Review"
+description: AP review checkpoint on methods, control structures, class design, and passing reference values.
 permalink: /csa/checkpoints/week-30/
 lesson_group: csa2
 lesson_type: review

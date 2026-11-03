@@ -44,7 +44,9 @@ end
 assert(!html.include?("Awaiting CS113 topic mapping"), "All current sources are mapped")
 assert(!html.include?("CS112 Instruction / Examples"), "Keep report introductions separate")
 assert(!html.include?('id="cs112-'), "Keep anchors scoped to CS113")
-assert(html.include?("CSA week 14") && html.include?("CSA week 15"), "Retain early search/sort scheduling")
+# Map lookup moved from week 14 to Comparable Implementations in week 10; sorting stays in week 15.
+early_lookup = (10..14).any? { |week| html.match?(/CSA week #{week}\b/) }
+assert(early_lookup && html.include?("CSA week 15"), "Retain early search/sort scheduling")
 assert(html.include?("reference, not currently scheduled"), "Preserve unscheduled reference labels")
 assert(html.include?("unfinished authoring draft, planned week 34"), "Drafts are not live assignments")
 assert(html.include?("Not every student is expected to complete every layer"), "Preserve differentiated depth")

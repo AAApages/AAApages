@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 29 - AP Evidence Handoff"
+description: Sprint 7 handoff of AP evidence on sorting and recursion.
 permalink: /csa/checkpoints/week-29/
 lesson_group: csa2
 lesson_type: review

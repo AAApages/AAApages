@@ -42,6 +42,9 @@ gem "jekyll-theme-minima"
 gem "jekyll-remote-theme"
 gem "jekyll-include-cache"
 gem "kramdown-parser-gfm"
+# `redirect_from:` in frontmatter keeps old lesson URLs working after a permalink
+# change (make lesson-update adds it automatically). 0.16 supports Jekyll 3.9.
+gem "jekyll-redirect-from", "~> 0.16.0"
 
 # ============================================================================
 # Web Server & JavaScript Runtime

@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Dashboard breakdown documentation
+description: Why and how the large dashboard.html file is being split into smaller files, one for each dashboard tab.
 permalink: /docs/dashboardchanges
 lesson_group: "csa2"
 categories: []

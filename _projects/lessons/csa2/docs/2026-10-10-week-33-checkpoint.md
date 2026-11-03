@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 33 - AP 2D Arrays and Readiness Review"
+description: AP review checkpoint on 2D array algorithms and overall exam readiness.
 permalink: /csa/checkpoints/week-33/
 lesson_group: csa2
 lesson_type: review

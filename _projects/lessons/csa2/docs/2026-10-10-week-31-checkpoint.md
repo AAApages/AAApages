@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 31 - AP Arrays and ArrayLists Review"
+description: AP review checkpoint on ArrayList methods, ArrayList traversal, and array FRQs.
 permalink: /csa/checkpoints/week-31/
 lesson_group: csa2
 lesson_type: review

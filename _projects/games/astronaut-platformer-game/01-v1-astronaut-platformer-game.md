@@ -1,6 +1,7 @@
 ---
 layout: opencs
 title: Our game
+description: Play the astronaut platformer with story, meteor, maze, and death levels
 date: 2026-04-12
 permalink: /astro-platgame/
 ---

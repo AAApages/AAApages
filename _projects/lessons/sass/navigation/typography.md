@@ -211,6 +211,7 @@ Complete this quick-start flow so you can begin in about 2 minutes.
 4. Run each cell and verify the rendered output before submitting.
 
 ```yaml
+---
 layout: post
 title: OCS Semantic HTML & Typography Grammar HW
 categories: [SASS]
@@ -220,6 +221,7 @@ lesson_part: interactive
 lesson_type: lesson
 permalink: /sass/typography-hw
 author: githubID
+---
 ```
 
 ### Submission Safety Rules (Read First)

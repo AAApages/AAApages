@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 28 - Structure Evidence and Retrospective"
+description: Sprint 7 checkpoint collecting evidence on collections, the RPN calculator, and graph search, with a retrospective.
 permalink: /csa/checkpoints/week-28/
 lesson_group: csa2
 lesson_type: review

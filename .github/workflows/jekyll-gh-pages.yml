@@ -49,6 +49,12 @@ jobs:
           source venv/bin/activate  # Activate the virtual environment
           pip install -r requirements.txt  # Install Python packages
 
+      # Fail fast, before the slow build, on any lesson frontmatter error. Same check as `make pr-check`.
+      - name: Check lesson frontmatter
+        run: |
+          source venv/bin/activate
+          python scripts/lesson_check.py --errors-only
+
       - name: Build registered projects
         run: |
           make build-registered-projects  # Distribute all registered project files to Jekyll locations

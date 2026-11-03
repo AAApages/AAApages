@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Assignments Documentation
+description: How students create grade requests for peer grading and team teach assignments.
 permalink: /docs/assignments
 lesson_group: "cs112"
 articulation: {"institution":"MiraCosta College","course":"CS112"}

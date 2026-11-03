@@ -1,0 +1,12 @@
+# Conventions `make lesson-new PROJECT=javascript` uses for new lessons.
+# Taken from the existing lessons in notebooks/ (see #32). Change them here, not per lesson.
+# {slug} is the topic in lowercase-hyphen form: "Object Literals" -> object-literals.
+permalink: /js/{slug}/2027
+homework_permalink: /js/{slug}/hw
+lesson_language: JavaScript
+lesson_source: CS111
+categories: [JavaScript]
+assignment: true
+assignment_submission_type: code
+codemirror: true
+microblog: true

@@ -1,5 +1,8 @@
 HOST ?= localhost
 PORT ?= 4500
+# Seconds to wait for Jekyll's first build; a full site build takes ~9 min.
+# Override per run: make SERVER_TIMEOUT=1800
+SERVER_TIMEOUT ?= 900
 LOG_FILE = /tmp/jekyll$(PORT).log
 PYTHON := venv/bin/python3
 CONVERT_JOBS ?= 4
@@ -32,7 +35,7 @@ KNOWN_TARGETS := \
 	generate-makefiles build-project-includes build-registered-projects build-registered-docs build-dev-projects \
 	watch-registered-projects clean-registered-projects clean-removed-projects watch-dev-projects \
 	list-projects split-courses clean-courses clean-generated-makefiles use-minima use-cayman use-yat \
-	use-so-simple use-hydejack watch-rebuild
+	use-so-simple use-hydejack watch-rebuild lesson-check lesson-delete lesson-new lesson-update lesson-fix pr-check
 
 ###########################################
 # Capture ORIGINAL CLI Goals
@@ -374,6 +377,9 @@ clean-generated-makefiles:
 stop:
 	@echo "Stopping server..."
 	@@lsof -ti :$(PORT) | xargs kill >/dev/null 2>&1 || true
+	@# A server still on its first build has not opened the port yet, so lsof misses it.
+	@# [j] keeps pkill from matching this recipe's own shell command line.
+	@@pkill -f "[j]ekyll serve -H $(HOST) -P $(PORT)" >/dev/null 2>&1 || true
 	@echo "Stopping logging process..."
 	@@ps aux | awk -v log_file=$(LOG_FILE) '$$0 ~ "tail -f " log_file { print $$2 }' | xargs kill >/dev/null 2>&1 || true
 	@echo "Stopping notebook watcher..."
@@ -532,7 +538,7 @@ wait-for-server:
 			grep "Server address:" $(LOG_FILE); \
 			break; \
 		fi; \
-		if [ $$COUNTER -eq 300 ]; then \
+		if [ $$COUNTER -eq $(SERVER_TIMEOUT) ]; then \
 			echo "Server timed out after $$COUNTER seconds."; \
 			echo "Review errors from $(LOG_FILE)."; \
 			cat $(LOG_FILE); \
@@ -610,6 +616,12 @@ help:
 	@echo "Diagnostic Commands:"
 	@echo "  make convert-check  - Check notebooks for conversion warnings"
 	@echo "  make convert-fix    - Fix identified notebook conversion issues"
+	@echo "  make pr-check       - Run before opening a PR: the lesson check the PR build runs"
+	@echo "  make lesson-check   - Check lesson frontmatter (LESSONS=\"<paths>\" to narrow)"
+	@echo "  make lesson-delete FILE=<notebook> [CONFIRM=1] [FORCE=1] - Delete a lesson and its generated copies"
+	@echo "  make lesson-new PROJECT=<p> TOPIC=\"<t>\" DESCRIPTION=\"<d>\" CREATORS=<uids> [COURSE=<c> WEEK=<n>] - Create a lesson"
+	@echo "  make lesson-update FILE=<notebook> SET=\"k=v;k=v\" [UNSET=\"k\"] - Edit frontmatter (permalink changes add a redirect)"
+	@echo "  make lesson-fix [LESSONS=\"<paths>\"] [CONFIRM=1] - Apply fixes that have one right answer"
 
 # Notebook diagnostic and fix targets
 convert-check:
@@ -621,6 +633,38 @@ convert-fix:
 	@echo "Running conversion fixes..."
 	@echo "️Fixing notebooks with known warnings or errors..."
 	@$(PYTHON) scripts/check_conversion_warnings.py --fix
+
+# Run before opening a PR. The Pages build runs the same check and fails the PR on any error.
+pr-check:
+	@$(PYTHON) scripts/lesson_check.py --errors-only
+
+# Lesson maintenance: see scripts/lesson_check.py and scripts/lesson_delete.py
+# SINCE=origin/main checks only the lessons your branch changed.
+lesson-check:
+	@$(PYTHON) scripts/lesson_check.py $(LESSONS) $(if $(SINCE),--changed-since "$(SINCE)")
+
+# Dry run unless CONFIRM=1, so a typo in FILE can't delete anything.
+lesson-delete:
+	@if [ -z "$(FILE)" ]; then echo "Error: FILE=<lesson notebook> is required"; exit 1; fi
+	@$(PYTHON) scripts/lesson_delete.py "$(FILE)" $(if $(CONFIRM),--confirm) $(if $(FORCE),--force)
+
+# Conventions come from _projects/<category>/$(PROJECT)/lesson-conventions.yml.
+lesson-new:
+	@if [ -z "$(PROJECT)" ] || [ -z "$(TOPIC)" ] || [ -z "$(DESCRIPTION)" ]; then \
+		echo "Error: PROJECT=, TOPIC= and DESCRIPTION= are required (plus CREATORS= for assignment projects)"; exit 1; fi
+	@$(PYTHON) scripts/lesson_new.py "$(PROJECT)" "$(TOPIC)" --description "$(DESCRIPTION)" --creators "$(CREATORS)" \
+		$(if $(AUTHOR),--author "$(AUTHOR)") $(if $(COURSE),--course "$(COURSE)") $(if $(WEEK),--week "$(WEEK)") \
+		$(if $(DATE),--date "$(DATE)")
+
+# SET takes `key=value` pairs separated by `;`. A permalink change adds a redirect from the old URL.
+lesson-update:
+	@if [ -z "$(FILE)" ]; then echo "Error: FILE=<lesson notebook> is required"; exit 1; fi
+	@$(PYTHON) scripts/lesson_update.py "$(FILE)" --sets "$(SET)" $(foreach key,$(UNSET),--unset $(key)) \
+		$(if $(NO_REDIRECT),--no-redirect)
+
+# Dry run unless CONFIRM=1.
+lesson-fix:
+	@$(PYTHON) scripts/lesson_fix.py $(LESSONS) $(if $(CONFIRM),--confirm)
 
 ###########################################
 # Project Auto-Registration

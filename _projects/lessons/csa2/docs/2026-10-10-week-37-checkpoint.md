@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Week 37 - Finals Evidence Checklist"
+description: Finals checklist pointing to the evidence and reflection already presented.
 permalink: /csa/checkpoints/week-37/
 lesson_group: csa2
 lesson_type: review
