@@ -1,23 +1,30 @@
 // Sprint Reflection and Growth Over Time, the first two tabs of the Retrospective page (/retrospective).
 //
-// Teachers and admins open sprints; for each one a student ranks the Ground 0 evaluation items
-// (T01-T12 technical, P01-P10 professional, 0 = not entered, 1-5), writes a summary per section,
-// answers the retrospective questions and ticks the Ground 0 checklist. The teacher adds their own
-// rank and a comment beside every item, and the student sees both. Growth Over Time charts each
-// item across the year's sprints. Everything is stored in Spring (/api/sprint-retros); the items
-// come from SprintRetroTemplate there, so this file only relies on their ids.
-import { javaURI, fetchOptions } from '../api/config.js';
+// The sprints and their dates come from the school calendar (_data/school_calendar.yml, embedded by
+// the layout); nobody types them here. A student reflects first (the retrospective questions, then
+// a Ground 0 rank and summary per section: T01-T12 technical, P01-P10 professional, 0 = not entered,
+// 1-5), sees what they committed to last sprint, and can tick the checklist read from the sprint's
+// own page as work goes on. Teachers review: their rank and comment sit beside every item, and the
+// student sees both. Growth Over Time charts each item across the year. The student is always the
+// signed-in account. Everything is stored in Spring (/api/sprint-retros); the items come from
+// SprintRetroTemplate there, so this file only relies on their ids.
+import { javaURI, fetchOptions, baseurl } from '../api/config.js';
 
 const api = `${javaURI}/api/sprint-retros`;
 const SPRINT_KEY = 'sprint-retro:sprint';
 const COLORS = ['#60a5fa', '#34d399', '#f59e0b', '#f472b6', '#a78bfa', '#22d3ee', '#f87171', '#a3e635'];
 // Answers shown side by side in "Your words over time".
 const STORY_KEYS = ['techRetro', 'proRetro', 'techGoal', 'commitBehavior'];
+// Last sprint's answers carried into this sprint's reflection, so a commitment gets looked back on.
+const COMMITMENT_KEYS = ['techGoal', 'commitBehavior', 'commitSkill', 'commitTeam', 'commitEvidence'];
+// Sprint pages live at /sprintN/objectives; the exceptions are listed here.
+const SPRINT_PAGE_OVERRIDES = { 'Sprint 1': '/sprint1/challenge' };
 
 class SignedOut extends Error {}
 
 const shared = { loaded: null, template: null, sprints: [], canManage: false };
-const ref = { root: null, sprintId: null, mode: 'mine', studentId: null, roster: [], view: null, dirty: false, editingId: null };
+const ref = { root: null, sprintId: null, mode: 'mine', studentId: null, roster: [], view: null, dirty: false, checklist: null, lookBack: null };
+const checklists = new Map();
 const growth = { root: null, personId: null, progress: null, chart: null, viewKey: 'sections', perspective: 'self' };
 
 // ---------- shared ----------
@@ -33,13 +40,65 @@ async function call(path, options = {}) {
     return res.status === 204 ? null : res.json();
 }
 
-/** Loads the template and sprint list once per page, or again when force is true. */
-async function loadShared(force = false) {
-    if (!shared.loaded || force) {
-        shared.loaded = Promise.all([call('/template'), call('')]).then(([template, list]) => {
+/**
+ * The sprints in the school calendar: each starts the Monday of its "Sprint N Start" week and ends
+ * the Friday of its "Sprint N Retrospective" week. weeks is the calendar file's weeks map.
+ */
+export function calendarSprints(weeks) {
+    const found = new Map();
+    Object.keys(weeks || {}).map(Number).sort((a, b) => a - b).forEach((number) => {
+        const week = weeks[number];
+        const match = /Sprint (\d+) (Start|Retrospective)/.exec(week.notes || '');
+        if (!match) return;
+        const name = `Sprint ${match[1]}`;
+        const sprint = found.get(name) || { name };
+        if (match[2] === 'Start') sprint.startDate = week.monday;
+        else sprint.endDate = week.friday;
+        found.set(name, sprint);
+    });
+    return [...found.values()].filter((sprint) => sprint.startDate && sprint.endDate);
+}
+
+function readCalendar() {
+    const element = document.getElementById('retro-school-calendar');
+    try {
+        return calendarSprints(element ? JSON.parse(element.textContent) : {});
+    } catch (e) {
+        console.warn('Could not read the school calendar:', e);
+        return [];
+    }
+}
+
+/** A teacher's visit brings the stored sprints in line with the calendar, so students can reflect on them. */
+async function syncedSprints(stored, calendar) {
+    const inStep = calendar.every((entry) => stored.some((s) => s.name === entry.name
+        && s.startDate === entry.startDate && s.endDate === entry.endDate));
+    if (inStep) return stored;
+    try {
+        return await call('/calendar', { method: 'PUT', body: JSON.stringify({ sprints: calendar }) });
+    } catch (e) {
+        console.warn('Could not update the sprints from the calendar:', e);
+        return stored;
+    }
+}
+
+/** The calendar's sprints that have started, using its dates. Anything else stored is not offered. */
+function startedSprints(stored, calendar) {
+    const today = new Date().toISOString().slice(0, 10);
+    return calendar.filter((entry) => entry.startDate <= today).flatMap((entry) => {
+        const row = stored.find((s) => s.name === entry.name);
+        return row ? [{ ...row, startDate: entry.startDate, endDate: entry.endDate }] : [];
+    });
+}
+
+/** Loads the template and sprint list once per page. */
+async function loadShared() {
+    if (!shared.loaded) {
+        shared.loaded = Promise.all([call('/template'), call('')]).then(async ([template, list]) => {
+            const calendar = readCalendar();
             shared.template = template;
-            shared.sprints = list.sprints;
             shared.canManage = list.canManage;
+            shared.sprints = startedSprints(list.canManage ? await syncedSprints(list.sprints, calendar) : list.sprints, calendar);
         });
         shared.loaded.catch(() => { shared.loaded = null; });
     }
@@ -68,14 +127,12 @@ function writeStore(key, value) {
     try { localStorage.setItem(key, value); } catch { /* storage unavailable */ }
 }
 
-/** The remembered sprint if it still exists, else the latest one that has started, else the first. */
+/** The remembered sprint if it is still offered, else the latest one that has started. */
 function defaultSprintId() {
     const remembered = Number(readStore(SPRINT_KEY));
     if (shared.sprints.some((s) => s.id === remembered)) return remembered;
-    const today = new Date().toISOString().slice(0, 10);
-    const started = shared.sprints.filter((s) => s.startDate <= today);
-    const pick = started.length ? started[started.length - 1] : shared.sprints[0];
-    return pick ? pick.id : null;
+    const latest = shared.sprints[shared.sprints.length - 1];
+    return latest ? latest.id : null;
 }
 
 function sprintDates(sprint) {
@@ -109,25 +166,10 @@ export async function initSprintReflection(root) {
       <section class="sr">
         <header>
           <h2 class="sr-title">Sprint Reflection</h2>
-          <p class="sr-muted">Rank yourself on each Ground 0 item, write about the evidence behind your ranks, and compare them with your teacher's. 0 means not entered yet.</p>
+          <p class="sr-muted">Step back from the tasks: what changed in how you work, what did you learn about yourself and your team, and what will you do differently next sprint? Your ranks and your teacher's sit beside that as evidence. Sprint dates come from the school calendar.</p>
         </header>
         <p class="sr-muted" data-sr="status">Loading…</p>
         <div class="sr-stack" data-sr="body" hidden>
-          <details class="sr-card" data-sr="manage" hidden>
-            <summary class="sr-summary">Manage sprints <span class="sr-muted sr-small">(teachers)</span></summary>
-            <div data-sr="manage-list"></div>
-            <form class="sr-manage-form" data-sr="manage-form">
-              <label class="sr-field"><span class="sr-label">Name</span><input class="sr-input" name="sprintName" maxlength="100" placeholder="Sprint 3" required></label>
-              <label class="sr-field"><span class="sr-label">Start</span><input class="sr-input sr-input--date" type="date" name="startDate" required></label>
-              <label class="sr-field"><span class="sr-label">End (optional)</span><input class="sr-input sr-input--date" type="date" name="endDate"></label>
-              <div class="sr-row">
-                <button type="submit" class="sr-btn" data-sr="manage-submit">Add sprint</button>
-                <button type="button" class="sr-btn sr-btn--ghost" data-sr="manage-cancel" hidden>Cancel</button>
-              </div>
-              <p class="sr-small" data-sr="manage-status" role="status"></p>
-            </form>
-            <p class="sr-muted sr-small">Every sprint uses the Ground 0 items, so students can compare their ranks across the year. A sprint students have reflected on cannot be deleted.</p>
-          </details>
           <div class="sr-card sr-bar">
             <label class="sr-field"><span class="sr-label">Sprint</span><select class="sr-input" data-sr="sprint"></select></label>
             <label class="sr-field" data-sr="student-wrap" hidden><span class="sr-label">Student</span><select class="sr-input" data-sr="student"></select></label>
@@ -153,10 +195,8 @@ export async function initSprintReflection(root) {
     // Teachers and admins only review students; students fill in their own reflection.
     ref.mode = shared.canManage ? 'review' : 'mine';
     root.querySelector('[data-sr="student-wrap"]').hidden = !shared.canManage;
-    root.querySelector('[data-sr="manage"]').hidden = !shared.canManage;
     ref.sprintId = defaultSprintId();
     renderSprintSelect();
-    renderManageList();
     await loadReflection();
 }
 
@@ -170,8 +210,8 @@ function renderSprintSelect() {
     const none = ref.root.querySelector('[data-sr="no-sprints"]');
     none.hidden = shared.sprints.length > 0;
     ref.root.querySelector('[data-sr="no-sprints-text"]').textContent = shared.canManage
-        ? 'No sprints yet. Add one under Manage sprints and your students will see it here.'
-        : 'Your teacher has not opened a sprint for reflection yet. Check back soon.';
+        ? 'The school calendar has no sprint that has started yet.'
+        : 'No sprints to reflect on yet. They appear from the school calendar once a teacher has opened this page.';
 }
 
 async function loadReflection() {
@@ -193,10 +233,67 @@ async function loadReflection() {
         } else {
             ref.view = await call(`/${ref.sprintId}/reflection`);
         }
+        [ref.checklist, ref.lookBack] = await Promise.all([loadChecklist(), loadLookBack()]);
         renderForm();
     } catch (e) {
         form.innerHTML = `<p class="sr-warn">${escapeHtml(e instanceof SignedOut ? 'Sign in again to continue.' : e.message)}</p>`;
     }
+}
+
+/** The checkboxes on the sprint's own page, grouped under their headings. Cached per sprint. */
+async function loadChecklist() {
+    const sprint = shared.sprints.find((s) => s.id === ref.sprintId);
+    if (!checklists.has(sprint.name)) checklists.set(sprint.name, readSprintPage(sprint.name));
+    return checklists.get(sprint.name);
+}
+
+async function readSprintPage(name) {
+    const path = SPRINT_PAGE_OVERRIDES[name] || `/sprint${name.replace(/\D/g, '')}/objectives`;
+    const url = `${baseurl}${path}/`;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return { url: null, sections: [] };
+        const page = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const seen = new Set();
+        const sections = [];
+        let current = null;
+        page.querySelectorAll('h2, h3, h4, .task-list-item').forEach((element) => {
+            const text = element.textContent.replace(/\s+/g, ' ').trim();
+            if (!element.matches('.task-list-item')) {
+                current = { title: text, checks: [] };
+                return;
+            }
+            const id = checkId(text);
+            if (seen.has(id)) return; // the same statement repeated later on the page
+            seen.add(id);
+            if (!current) current = { title: name, checks: [] };
+            if (!current.checks.length) sections.push(current);
+            current.checks.push({ id, text });
+        });
+        return { url, sections };
+    } catch (e) {
+        console.warn('Could not read the sprint page:', e);
+        return { url: null, sections: [] };
+    }
+}
+
+/** A short id from a statement's text, so ticks stay attached while the page around them changes. */
+function checkId(text) {
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+    return `c-${hash.toString(16)}`;
+}
+
+/** What the student wrote about next steps in the previous sprint; null when there is nothing. */
+async function loadLookBack() {
+    const index = shared.sprints.findIndex((s) => s.id === ref.sprintId);
+    if (index < 1) return null;
+    const previous = shared.sprints[index - 1];
+    const progress = await call(ref.mode === 'review' ? `/progress/${ref.studentId}` : '/progress');
+    const text = progress.text[progress.sprints.findIndex((s) => s.id === previous.id)] || {};
+    const labels = prompts();
+    const entries = COMMITMENT_KEYS.filter((key) => text[key]).map((key) => ({ label: labels[key], text: text[key] }));
+    return entries.length ? { sprint: previous.name, entries } : null;
 }
 
 async function loadRoster() {
@@ -207,7 +304,7 @@ async function loadRoster() {
     const select = ref.root.querySelector('[data-sr="student"]');
     select.innerHTML = ref.roster.map((r) => {
         const mark = r.reviewed ? '✓ reviewed' : r.submitted ? `submitted · ${r.ranked} ranked` : 'not started';
-        return `<option value="${r.personId}">${escapeHtml(r.name || r.uid)} (${mark})</option>`;
+        return `<option value="${r.personId}">${escapeHtml(r.name || r.uid)} · ${escapeHtml(r.uid)} (${mark})</option>`;
     }).join('');
     if (ref.studentId) select.value = String(ref.studentId);
 }
@@ -218,7 +315,9 @@ function renderForm() {
     const student = view.student;
     const teacher = view.teacher;
     const checks = new Set(student.checks);
-    const totalChecks = shared.template.checklist.reduce((n, s) => n + s.checks.length, 0);
+    const checklist = ref.checklist;
+    const pageChecks = checklist.sections.flatMap((section) => section.checks);
+    const lookBack = ref.lookBack;
     const form = ref.root.querySelector('[data-sr="form"]');
     const ranked = Object.keys(student.ranks).length;
     const totalItems = sections().reduce((n, s) => n + s.items.length, 0);
@@ -239,24 +338,31 @@ function renderForm() {
           <span class="sr-label">Overall comment from your teacher</span>
           <p class="sr-quote">${escapeHtml(teacher.overall)}</p>
         </div>` : ''}
-      <details class="sr-card" ${review ? '' : 'open'}>
-        <summary class="sr-summary">Ground 0 checklist <span class="sr-pill">${checks.size} of ${totalChecks}</span></summary>
-        <p class="sr-muted sr-small">Check your starting position before you rank yourself.</p>
-        <div class="sr-checklist">
-          ${shared.template.checklist.map((section) => `
-            <fieldset class="sr-checks">
-              <legend>${escapeHtml(section.title)}</legend>
-              ${section.checks.map((check) => `
-                <label><input type="checkbox" data-check="${check.id}" ${checks.has(check.id) ? 'checked' : ''} ${review ? 'disabled' : ''}> <span>${escapeHtml(check.text)}</span></label>`).join('')}
-            </fieldset>`).join('')}
-        </div>
-      </details>
+      ${lookBack ? `
+        <div class="sr-card">
+          <h3 class="sr-h3">${review ? 'What they' : 'What you'} said about next steps in ${escapeHtml(lookBack.sprint)}</h3>
+          <p class="sr-muted sr-small">${review ? 'Did it happen, and why or why not? Worth asking about.' : 'Did it happen? What got in the way, or what helped? Use this in your reflection below.'}</p>
+          ${lookBack.entries.map((entry) => `<div><span class="sr-label">${escapeHtml(entry.label)}</span><p class="sr-quote">${escapeHtml(entry.text)}</p></div>`).join('')}
+        </div>` : ''}
       ${shared.template.evaluations.map((evaluation) => evaluationCard(evaluation, student, teacher, review)).join('')}
       ${review ? `
         <div class="sr-card sr-card--teacher">
           <label class="sr-field"><span class="sr-label">Overall comment for ${escapeHtml(view.personName || 'the student')}</span>
             <textarea class="sr-input" rows="3" maxlength="2000" data-overall>${escapeHtml(teacher.overall || '')}</textarea></label>
         </div>` : ''}
+      <details class="sr-card">
+        <summary class="sr-summary">Sprint checklist${pageChecks.length ? ` <span class="sr-pill">${pageChecks.filter((check) => checks.has(check.id)).length} of ${pageChecks.length}</span>` : ''}</summary>
+        ${pageChecks.length ? `
+          <p class="sr-muted sr-small">From the <a class="sr-link" href="${checklist.url}">sprint page</a>. Tick items as the work happens; this tracks progress during the sprint and is separate from your reflection.</p>
+          <div class="sr-checklist">
+            ${checklist.sections.map((section) => `
+              <fieldset class="sr-checks">
+                <legend>${escapeHtml(section.title)}</legend>
+                ${section.checks.map((check) => `
+                  <label><input type="checkbox" data-check="${check.id}" ${checks.has(check.id) ? 'checked' : ''} ${review ? 'disabled' : ''}> <span>${escapeHtml(check.text)}</span></label>`).join('')}
+              </fieldset>`).join('')}
+          </div>` : '<p class="sr-muted sr-small">This sprint\'s page has no checklist yet.</p>'}
+      </details>
       <div class="sr-savebar">
         <button type="submit" class="sr-btn">${review ? 'Save feedback' : 'Save reflection'}</button>
         <span class="sr-small" data-sr="save-status" role="status"></span>
@@ -271,6 +377,14 @@ function evaluationCard(evaluation, student, teacher, review) {
     return `
       <div class="sr-card">
         <h3 class="sr-h3">${escapeHtml(evaluation.title)}</h3>
+        <div class="sr-prompts">
+          ${evaluation.prompts.map((p, i) => `
+            <label class="sr-field"><span class="${i === 0 ? 'sr-h4' : 'sr-label'}">${escapeHtml(p.label)}</span>
+              ${review
+                  ? `<p class="sr-quote">${student.text[p.key] ? escapeHtml(student.text[p.key]) : '<span class="sr-muted">—</span>'}</p>`
+                  : `<textarea class="sr-input" rows="${i === 0 ? 3 : 2}" maxlength="2000" data-text="${p.key}">${escapeHtml(student.text[p.key] || '')}</textarea>`}
+            </label>`).join('')}
+        </div>
         <details class="sr-levels">
           <summary class="sr-small">What the ranks mean</summary>
           <table class="sr-table sr-table--compact"><tbody>
@@ -308,14 +422,6 @@ function evaluationCard(evaluation, student, teacher, review) {
                 ? `<label class="sr-field"><span class="sr-label">Your comment on this summary</span><input class="sr-input" maxlength="1000" data-tcomment="${section.key}" value="${escapeHtml(teacher.comments[section.key] || '')}"></label>`
                 : (teacher.comments[section.key] ? `<p class="sr-teacher-note"><span class="sr-label">Teacher</span>${escapeHtml(teacher.comments[section.key])}</p>` : '')}
           </div>`).join('')}
-        <div class="sr-prompts">
-          ${evaluation.prompts.map((p, i) => `
-            <label class="sr-field"><span class="${i === 0 ? 'sr-h4' : 'sr-label'}">${escapeHtml(p.label)}</span>
-              ${review
-                  ? `<p class="sr-quote">${student.text[p.key] ? escapeHtml(student.text[p.key]) : '<span class="sr-muted">—</span>'}</p>`
-                  : `<textarea class="sr-input" rows="${i === 0 ? 3 : 2}" maxlength="2000" data-text="${p.key}">${escapeHtml(student.text[p.key] || '')}</textarea>`}
-            </label>`).join('')}
-        </div>
       </div>`;
 }
 
@@ -338,7 +444,9 @@ function collect(form) {
     const text = {};
     form.querySelectorAll('[data-rank]').forEach((el) => { if (value(el)) ranks[el.dataset.rank] = value(el); });
     form.querySelectorAll('[data-text]').forEach((el) => { if (el.value.trim()) text[el.dataset.text] = el.value; });
-    const checks = [...form.querySelectorAll('[data-check]:checked')].map((el) => el.dataset.check);
+    const onPage = new Set([...form.querySelectorAll('[data-check]')].map((el) => el.dataset.check));
+    const checks = [...form.querySelectorAll('[data-check]:checked')].map((el) => el.dataset.check)
+        .concat(ref.view.student.checks.filter((id) => !onPage.has(id))); // ticks the page no longer lists stay stored
     return { ranks, text, checks };
 }
 
@@ -400,106 +508,10 @@ function bindReflection() {
     root.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (event.target.matches('[data-sr="form"]')) await save(event.target);
-        if (event.target.matches('[data-sr="manage-form"]')) await saveSprint(event.target);
-    });
-    root.addEventListener('click', async (event) => {
-        const button = event.target.closest('button');
-        if (!button) return;
-        if (button.dataset.editSprint) {
-            startEdit(Number(button.dataset.editSprint));
-        } else if (button.dataset.deleteSprint) {
-            await deleteSprint(Number(button.dataset.deleteSprint));
-        } else if (button.matches('[data-sr="manage-cancel"]')) {
-            startEdit(null);
-        }
     });
     window.addEventListener('beforeunload', (event) => {
         if (ref.dirty) { event.preventDefault(); event.returnValue = ''; }
     });
-}
-
-// ---------- Manage sprints (teachers) ----------
-
-function renderManageList() {
-    const list = ref.root.querySelector('[data-sr="manage-list"]');
-    list.innerHTML = !shared.sprints.length ? '<p class="sr-muted sr-small">No sprints yet.</p>' : `
-      <div class="sr-table-wrap"><table class="sr-table">
-        <thead><tr><th>Sprint</th><th>Dates</th><th></th></tr></thead>
-        <tbody>${shared.sprints.map((s) => `
-          <tr>
-            <td>${escapeHtml(s.name)}</td>
-            <td>${sprintDates(s)}</td>
-            <td class="sr-actions">
-              <button type="button" class="sr-btn sr-btn--ghost sr-btn--sm" data-edit-sprint="${s.id}">Edit</button>
-              <button type="button" class="sr-btn sr-btn--link" data-delete-sprint="${s.id}">Delete</button>
-            </td>
-          </tr>`).join('')}
-        </tbody>
-      </table></div>`;
-}
-
-function startEdit(id) {
-    const form = ref.root.querySelector('[data-sr="manage-form"]');
-    const sprint = shared.sprints.find((s) => s.id === id);
-    ref.editingId = sprint ? id : null;
-    const { sprintName, startDate, endDate } = form.elements;
-    sprintName.value = sprint ? sprint.name : '';
-    startDate.value = sprint ? sprint.startDate : '';
-    endDate.value = sprint && sprint.endDate ? sprint.endDate : '';
-    form.querySelector('[data-sr="manage-submit"]').textContent = sprint ? 'Save changes' : 'Add sprint';
-    form.querySelector('[data-sr="manage-cancel"]').hidden = !sprint;
-    form.querySelector('[data-sr="manage-status"]').textContent = '';
-    if (sprint) sprintName.focus();
-}
-
-async function saveSprint(form) {
-    const status = form.querySelector('[data-sr="manage-status"]');
-    const { sprintName, startDate, endDate } = form.elements;
-    const body = { name: sprintName.value, startDate: startDate.value || null, endDate: endDate.value || null };
-    status.className = 'sr-small';
-    status.textContent = 'Saving…';
-    try {
-        const editing = ref.editingId;
-        const saved = await call(editing ? `/${editing}` : '', { method: editing ? 'PUT' : 'POST', body: JSON.stringify(body) });
-        await loadShared(true);
-        startEdit(null);
-        status.className = 'sr-small sr-ok';
-        status.textContent = editing ? `Saved ${saved.name}.` : `Added ${saved.name}. Students can reflect on it now.`;
-        if (!editing && confirmLeave()) {
-            ref.sprintId = saved.id;
-            writeStore(SPRINT_KEY, String(saved.id));
-            renderSprintSelect();
-            renderManageList();
-            await loadReflection();
-        } else {
-            renderSprintSelect();
-            renderManageList();
-        }
-        if (growth.root) refreshGrowth();
-    } catch (e) {
-        status.className = 'sr-small sr-warn';
-        status.textContent = e.message;
-    }
-}
-
-async function deleteSprint(id) {
-    const sprint = shared.sprints.find((s) => s.id === id);
-    if (!sprint || !window.confirm(`Delete ${sprint.name}?`)) return;
-    const status = ref.root.querySelector('[data-sr="manage-status"]');
-    try {
-        await call(`/${id}`, { method: 'DELETE' });
-        await loadShared(true);
-        if (ref.sprintId === id) ref.sprintId = defaultSprintId();
-        renderSprintSelect();
-        renderManageList();
-        status.className = 'sr-small sr-ok';
-        status.textContent = `Deleted ${sprint.name}.`;
-        await loadReflection();
-        if (growth.root) refreshGrowth();
-    } catch (e) {
-        status.className = 'sr-small sr-warn';
-        status.textContent = e.message;
-    }
 }
 
 // ---------- Growth Over Time ----------
@@ -563,7 +575,7 @@ async function refreshGrowth() {
     try {
         await loadShared();
         if (shared.canManage && !root.querySelector('[data-sg="person"]').options.length) await loadGrowthPeople();
-        growth.progress = await call(growth.personId ? `/progress/${growth.personId}` : '/progress');
+        growth.progress = offeredProgress(await call(growth.personId ? `/progress/${growth.personId}` : '/progress'));
     } catch (e) {
         if (e instanceof SignedOut) return signedOutMessage(status, body);
         status.textContent = `Could not load your growth: ${e.message}`;
@@ -574,6 +586,18 @@ async function refreshGrowth() {
     body.hidden = false;
     renderViewSelect();
     renderGrowth();
+}
+
+/** Keeps only the sprints the calendar offers, keeping every per-sprint list lined up with them. */
+function offeredProgress(progress) {
+    const indexes = shared.sprints.map((sprint) => progress.sprints.findIndex((s) => s.id === sprint.id));
+    const pick = (list) => indexes.map((i) => list[i]);
+    return {
+        sprints: shared.sprints,
+        items: progress.items.map((item) => ({ ...item, self: pick(item.self), teacher: pick(item.teacher) })),
+        text: pick(progress.text),
+        teacherOverall: pick(progress.teacherOverall),
+    };
 }
 
 async function loadGrowthPeople() {
@@ -812,7 +836,8 @@ function injectStyles() {
       .sr-checks input { margin-top: .2rem; accent-color: #059669; }
       .sr-levels summary { cursor: pointer; opacity: .8; }
       .sr-section { display: grid; gap: .6rem; padding-top: .8rem; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
-      .sr-prompts { display: grid; gap: .7rem; padding-top: .8rem; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+      .sr-prompts { display: grid; gap: .7rem; }
+      .sr-link { color: #60a5fa; text-decoration: underline; }
       .sr-table-wrap { overflow-x: auto; }
       .sr-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
       .sr-table th { text-align: left; font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; opacity: .65; padding: .4rem .5rem; white-space: nowrap; }
@@ -829,10 +854,6 @@ function injectStyles() {
       .sr-pill { font-size: .72rem; font-weight: 500; padding: .1rem .5rem; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); margin-left: .4rem; }
       .sr-savebar { position: sticky; bottom: 0; display: flex; gap: .9rem; align-items: center; padding: .75rem 1rem; border-radius: .75rem;
         background: color-mix(in srgb, #171717 92%, transparent); border: 1px solid color-mix(in srgb, currentColor 18%, transparent); backdrop-filter: blur(4px); z-index: 5; }
-      .sr-manage-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
-      .sr-manage-form .sr-field { min-width: 10rem; }
-      .sr-manage-form p { flex-basis: 100%; margin: 0; }
-      .sr-actions { white-space: nowrap; text-align: right; }
       .sr-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; }
       .sr-tile { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: .75rem; padding: .8rem 1rem; display: flex; flex-direction: column; gap: .15rem; }
       .sr-tile-value { font-size: 1.2rem; font-weight: 600; }
