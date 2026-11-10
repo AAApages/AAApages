@@ -6,7 +6,8 @@
  *
  * Declarative widgets are written as plain HTML in a lesson and wired up on load:
  *   .u2-mcq    multiple choice (options carry data-correct / data-feedback)
- *   .u2-fill   short answer  (inputs carry data-answer, answers separated by |)
+ *   .u2-fill   short answer  (inputs carry data-answer, answers separated by a single |;
+ *              Java's || stays inside an answer; answers with operators are case-sensitive)
  *   .u2-order  put code lines in order (Parsons style)
  *   .u2-sort   drag or click items into labeled buckets
  *   .u2-quiz   scoreboard wrapper around .u2-mcq__q and .u2-fill__q blocks
@@ -215,15 +216,29 @@
   // ---------------------------------------------------------------------------
   // 2. Short answer
   // ---------------------------------------------------------------------------
-  function normalizeAnswer(text) {
-    return String(text).trim().toLowerCase().replace(/\s+/g, ' ');
+  // Answers are separated by a single |. Java's || is part of an answer, not two separators:
+  // a plain split('|') turned "a || b" into "a ", "" and " b", so the right answer never
+  // matched while an empty box or half an answer did.
+  var ANSWER_SEPARATOR = /(?<!\|)\|(?!\|)/;
+
+  // An answer with operator symbols is Java code, where identifiers are case-sensitive
+  // (hasId is not hasid). Plain words such as "Warm" or "no" stay case-insensitive.
+  function isCodeAnswer(candidate) {
+    return /[^A-Za-z0-9\s'.,-]/.test(candidate);
+  }
+
+  function normalizeAnswer(text, caseSensitive) {
+    var trimmed = String(text).trim().replace(/\s+/g, ' ');
+    return caseSensitive ? trimmed : trimmed.toLowerCase();
   }
 
   function answerMatches(given, expected) {
-    var normalizedGiven = normalizeAnswer(given);
-    var compactGiven = normalizedGiven.replace(/\s+/g, '');
-    return expected.split('|').some(function (candidate) {
-      var normalizedCandidate = normalizeAnswer(candidate);
+    return String(expected).split(ANSWER_SEPARATOR).some(function (candidate) {
+      if (candidate.trim() === '') return false;
+      var caseSensitive = isCodeAnswer(candidate);
+      var normalizedGiven = normalizeAnswer(given, caseSensitive);
+      var compactGiven = normalizedGiven.replace(/\s+/g, '');
+      var normalizedCandidate = normalizeAnswer(candidate, caseSensitive);
       if (normalizedGiven === normalizedCandidate) return true;
       if (compactGiven !== '' && compactGiven === normalizedCandidate.replace(/\s+/g, '')) return true;
       var a = parseFloat(normalizedGiven);
@@ -1016,6 +1031,7 @@
 
   var U2 = window.U2 || {};
   U2.init = init;
+  U2.answerMatches = answerMatches;
   U2.trace = function (id, cfg) { onReady(function () { traceWidget(id, cfg); restoreDone(document.getElementById(id)); }); };
   U2.truth = function (id, cfg) { onReady(function () { truthWidget(id, cfg); restoreDone(document.getElementById(id)); }); };
   U2.live = function (id, cfg) { onReady(function () { liveWidget(id, cfg); restoreDone(document.getElementById(id)); }); };

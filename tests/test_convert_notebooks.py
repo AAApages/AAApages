@@ -262,5 +262,35 @@ class NotebookConversionTests(unittest.TestCase):
         self.assertEqual("# intentional override", (self.project / "Makefile").read_text())
 
 
+class JavaCodeRunnerDetectionTests(unittest.TestCase):
+    """A `// CODE_RUNNER:` Java cell must become a runner whether or not it ends with Name.main(null);."""
+
+    @staticmethod
+    def code_cell(source):
+        import nbformat
+        return nbformat.from_dict({"cell_type": "code", "metadata": {}, "outputs": [], "execution_count": None, "source": source})
+
+    def test_java_class_without_trailing_main_call_becomes_java_runner(self):
+        cell = self.code_cell("// CODE_RUNNER: Compound Operators\npublic class Demo {\n    public static void main(String[] args) { System.out.println(1); }\n}")
+        runner = converter.CodeRunner.from_cell(cell, "/csa/unit_01/1_6", 0)
+        self.assertIsNotNone(runner)
+        self.assertEqual(runner.language, "java")
+        self.assertEqual(runner.challenge, "Compound Operators")
+        self.assertNotIn("CODE_RUNNER", runner.code)
+        self.assertTrue(runner.code.startswith("public class Demo"))
+
+    def test_trailing_main_call_is_still_detected_and_stripped(self):
+        cell = self.code_cell("// CODE_RUNNER: Fixture\npublic class Fixture { public static void main(String[] a) {} }\nFixture.main(null);")
+        runner = converter.CodeRunner.from_cell(cell, "/fixture", 0)
+        self.assertEqual(runner.language, "java")
+        self.assertNotIn("Fixture.main(null);", runner.code)
+
+    def test_other_languages_are_unchanged(self):
+        self.assertEqual(converter.detect_cell_language(self.code_cell("%%js\n// CODE_RUNNER: Js\nconsole.log(1);")), "javascript")
+        self.assertEqual(converter.detect_cell_language(self.code_cell("# CODE_RUNNER: Py\nprint(1)")), "python")
+        self.assertEqual(converter.detect_cell_language(self.code_cell("// just a comment\nint x = 1;")), "python")
+        self.assertEqual(converter.classify_custom_cell_type(self.code_cell("// a plain Java snippet\nint x = 1;")), None)
+
+
 if __name__ == "__main__":
     unittest.main()

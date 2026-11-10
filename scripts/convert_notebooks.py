@@ -155,6 +155,12 @@ def detect_cell_language(cell):
     if re.match(r'^\w+\.main\s*\(\s*null\s*\)\s*;?\s*$', last_line):
         return 'java'
 
+    # Java: a `// CODE_RUNNER:` marker. JavaScript cells start with %%js (checked above) and
+    # Python markers use `#`, so a `//` marker can only be Java. Without this, a Java class
+    # that omits the trailing `Name.main(null);` fell back to python and lost its runner.
+    if any(re.match(CODE_RUNNER_PATTERNS['java'], line.strip(), re.IGNORECASE) for line in lines):
+        return 'java'
+
     # Default to python
     return 'python'
 
